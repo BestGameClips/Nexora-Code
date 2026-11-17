@@ -15,6 +15,9 @@ import { Extensions } from "./Extensions";
 import { extOn } from "./lib/extensions";
 import { buildPresence } from "./lib/presence";
 import { FileIcon } from "./lib/fileicons";
+import { NAME, SHORT } from "./lib/brand";
+import logo from "./assets/logo@2x.png";
+import { getDiscord, subscribeDiscord } from "./lib/discord";
 
 type View = "explorer" | "settings" | "sftp" | "extensions" | "welcome";
 const useSettings = () => useSyncExternalStore(subscribe, getSettings);
@@ -54,6 +57,7 @@ export function App() {
       { id: "ide.extensions.focus", title: "Afficher les extensions", category: "Extensions", keys: "Ctrl+Shift+X", run: () => { setView("extensions"); update({ sidebarVisible: true }); } },
       { id: "ide.welcome.open", title: "Ouvrir l’accueil", category: "Aide", run: () => setView("welcome") },
       { id: "ide.markdown.preview", title: "Aperçu Markdown : afficher/masquer", category: "Éditeur", keys: "Ctrl+Shift+V", run: () => { if (extOn("markdown")) update({ mdPreview: !getSettings().mdPreview }); } },
+      { id: "ide.discord.toggle", title: "Discord : activer/désactiver la présence", category: "Discord", run: () => update({ discord: { ...getSettings().discord, enabled: !getSettings().discord.enabled } }) },
       { id: "ide.sftp.focus", title: "Afficher SFTP", category: "SFTP", keys: "Ctrl+Shift+Y", run: () => { setView("sftp"); update({ sidebarVisible: true }); } },
       { id: "ide.sftp.disconnect", title: "Se déconnecter du serveur SFTP", category: "SFTP", run: () => { disconnect(); } },
       { id: "ide.file.new", title: "Nouveau fichier…", category: "Fichier", keys: "Ctrl+N", run: () => setNewFile(true) },
@@ -100,7 +104,7 @@ export function App() {
   return (
     <div className={"app" + (maximized ? " maxi" : "")}>
       <header className="titlebar" data-tauri-drag-region>
-        <div className="brand" data-tauri-drag-region><span className="logo" />RustIDE Ultimate</div>
+        <div className="brand" data-tauri-drag-region><img className="logoimg" src={logo} alt="" draggable={false} />{NAME}</div>
         <button className="cmdbar" onClick={() => setPalette(true)} aria-label="Ouvrir la palette de commandes">
           <Icon n="search" size={14} /><span>Rechercher ou exécuter une commande</span><kbd>Ctrl+Maj+P</kbd>
         </button>
@@ -178,7 +182,9 @@ function Settings() {
       <h3>Discord Rich Presence</h3>
       <div className="card">
         {!extOn("discord") && <p className="sd pad">L’extension est désactivée pour cet espace de travail (onglet Extensions).</p>}
-        <Row title="Activer" desc="La connexion à Discord arrive dans un prochain module ; ces réglages sont déjà enregistrés."><Switch on={s.discord.enabled} set={(v) => update({ discord: { ...s.discord, enabled: v } })} label="Discord" /></Row>
+        <Row title="Identifiant d’application" desc="Créez une application sur discord.com/developers, copiez son « Application ID » (chiffres). Dans Rich Presence → Art Assets, ajoutez une image nommée « nexora »."><input type="text" inputMode="numeric" placeholder="ex. 123456789012345678" value={s.discord.clientId} onChange={(e) => update({ discord: { ...s.discord, clientId: e.target.value } })} /></Row>
+        <Row title="Activer la présence" desc="Envoie votre activité à l’application Discord ouverte sur ce PC. Désactivez-la ici à tout moment."><Switch on={s.discord.enabled} set={(v) => update({ discord: { ...s.discord, enabled: v }, ...(v ? { extensions: { ...s.extensions, discord: true } } : {}) })} label="Présence Discord" /></Row>
+        <Row title="État de la connexion"><DiscordStatusText /></Row>
         <Row title="Afficher le nom du fichier"><Switch on={s.discord.showFile} set={(v) => update({ discord: { ...s.discord, showFile: v } })} label="Nom du fichier" /></Row>
         <Row title="Afficher le nom du projet"><Switch on={s.discord.showProject} set={(v) => update({ discord: { ...s.discord, showProject: v } })} label="Nom du projet" /></Row>
         <Row title="Afficher le langage"><Switch on={s.discord.showLanguage} set={(v) => update({ discord: { ...s.discord, showLanguage: v } })} label="Langage" /></Row>
@@ -220,7 +226,8 @@ const EDITOR_KEYS: [string, string][] = [["Rechercher", "Ctrl+F"], ["Remplacer",
 function StatusBar({ themeName }: { themeName: string }) {
   const c = useSyncExternalStore(subscribeCursor, getCursor);
   const sf = useSyncExternalStore(subscribeSftp, getSftp);
-  return <footer className="status"><span>v0.1.0</span>{sf.connected && <span>SFTP : {sf.connected.name}</span>}<span className="grow" />
+  const dc = useSyncExternalStore(subscribeDiscord, getDiscord);
+  return <footer className="status"><span>{SHORT} v0.1.0</span>{sf.connected && <span>SFTP : {sf.connected.name}</span>}{dc.state === "connected" && <span title="Présence Discord active">Discord ●</span>}<span className="grow" />
     {c && <><span>Ln {c.ln}, Col {c.col}</span><span>{c.lang}</span><span>{c.eol}</span><span>Espaces : {c.tab}</span></>}<span>{themeName}</span></footer>;
 }
 
@@ -239,5 +246,10 @@ function PresenceCard() {
   const file = d.active ? basename(d.active) : null;
   const p = buildPresence(s, file, c?.lang ?? null, d.root ? basename(d.root) : null);
   return <div className="presence" aria-label="Aperçu de la présence Discord"><FileIcon name={file ?? "x"} />
-    <div><strong>RustIDE</strong><div>{p.details}</div>{p.state && <div className="sd">{p.state}</div>}<div className="sd">{p.showElapsed ? "Temps écoulé affiché" : "Temps masqué"}{p.smallImage ? ` · icône : ${p.smallImage}` : ""}</div></div></div>;
+    <div><strong>{NAME}</strong><div>{p.details}</div>{p.state && <div className="sd">{p.state}</div>}<div className="sd">{p.showElapsed ? "Temps écoulé affiché" : "Temps masqué"}{p.smallImage ? ` · icône : ${p.smallImage}` : ""}</div></div></div>;
+}
+
+function DiscordStatusText() {
+  const d = useSyncExternalStore(subscribeDiscord, getDiscord);
+  return <span className={"tag" + (d.state === "connected" ? " on" : "")} role="status" title={d.message}>{d.state === "connected" ? "Connecté" : d.state === "connecting" ? "Connexion…" : d.state === "error" ? "Erreur : " + d.message.slice(0, 80) : d.message}</span>;
 }

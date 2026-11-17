@@ -2,6 +2,8 @@ import { useSyncExternalStore } from "react";
 import { getSettings, subscribe, update, type Mode } from "./lib/settings";
 import { tr, type K } from "./lib/i18n";
 import { Gallery } from "./Gallery";
+import { SLOGAN } from "./lib/brand";
+import logo from "./assets/logo@2x.png";
 import { FileIcon, type IconPack } from "./lib/fileicons";
 
 export function Welcome({ onOpen, onSftp }: { onOpen: () => void; onSftp: () => void }) {
@@ -9,7 +11,7 @@ export function Welcome({ onOpen, onSftp }: { onOpen: () => void; onSftp: () => 
   const modes: [Mode, K][] = [["system", "sys"], ["light", "light"], ["dark", "dark"]];
   const packs: [IconPack, string][] = [["badges", "Badges"], ["minimal", "Minimal"], ["none", L("none")]];
   return (
-    <div className="page"><h1>{L("title")}</h1><p className="lead">{L("lead")}</p>
+    <div className="page"><div className="hero"><img src={logo} alt="" /><div><h1>{L("title")}</h1><p className="slogan">{SLOGAN}</p></div></div><p className="lead">{L("lead")}</p>
       {!s.onboarded && <div className="banner first" role="status"><span>{L("first")}</span><button className="btn" onClick={() => update({ onboarded: true })}>{L("done")}</button></div>}
       <h3>{L("start")}</h3>
       <div className="row2"><button className="btn" onClick={onOpen}>{L("open")}</button><button onClick={onSftp}>{L("sftp")}</button></div>

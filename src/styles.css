@@ -95,3 +95,6 @@ kbd{background:var(--bg3);border:1px solid var(--bd);border-radius:calc(var(--r)
 .srow input[type=text]{background:var(--bg);border:1px solid var(--bd);border-radius:var(--r);padding:4px 8px;width:220px}
 .pad{padding:10px 16px;margin:0}.presence{display:flex;gap:12px;align-items:center;width:100%;padding:10px;background:var(--bg);border:1px solid var(--bd);border-radius:var(--rl)}
 .banner.first{margin:10px 0;border:1px solid var(--ac);border-radius:var(--rl);background:var(--sel)}
+.logoimg{width:18px;height:18px;pointer-events:none;border-radius:calc(var(--r)*.4)}
+.hero{display:flex;align-items:center;gap:16px}.hero img{width:56px;height:56px;border-radius:calc(var(--r)*1.4)}.hero h1{margin:0}
+.slogan{margin:2px 0 0;color:var(--ac);font-weight:600;letter-spacing:.04em}
