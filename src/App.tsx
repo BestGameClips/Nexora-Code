@@ -4,11 +4,13 @@ import { getSettings, subscribe, update, inTauri, type Mode } from "./lib/settin
 import { register, all, keyOf, runByKeys, fuzzy } from "./lib/commands";
 import { Icon, type IconName } from "./lib/icons";
 import { Explorer } from "./Explorer";
+import { Sftp } from "./Sftp";
+import { getSftp, subscribeSftp, disconnect } from "./lib/sftp";
 import { Workbench } from "./Editor";
 import { openFolder, save, saveAll, cycleTab, createFile, close as closeTab, getDocs, getCursor, subscribeCursor } from "./lib/docs";
 import { THEMES, themeById, applyTheme } from "./lib/themes";
 
-type View = "explorer" | "settings";
+type View = "explorer" | "settings" | "sftp";
 const useSettings = () => useSyncExternalStore(subscribe, getSettings);
 const FUTURE: [string, IconName][] = [["Recherche", "search"], ["Git", "git"], ["Débogage", "bug"], ["Extensions", "ext"]];
 
@@ -43,6 +45,8 @@ export function App() {
     register([
       { id: "ide.palette.open", title: "Ouvrir la palette de commandes", category: "Général", keys: "Ctrl+Shift+P", alias: ["F1"], run: () => setPalette(true) },
       { id: "ide.settings.open", title: "Ouvrir les paramètres", category: "Général", keys: "Ctrl+,", run: () => setView("settings") },
+      { id: "ide.sftp.focus", title: "Afficher SFTP", category: "SFTP", keys: "Ctrl+Shift+Y", run: () => { setView("sftp"); update({ sidebarVisible: true }); } },
+      { id: "ide.sftp.disconnect", title: "Se déconnecter du serveur SFTP", category: "SFTP", run: () => { disconnect(); } },
       { id: "ide.file.new", title: "Nouveau fichier…", category: "Fichier", keys: "Ctrl+N", run: () => setNewFile(true) },
       { id: "ide.file.saveAll", title: "Tout enregistrer", category: "Fichier", keys: "Ctrl+Shift+S", run: () => { saveAll(); } },
       { id: "ide.tab.next", title: "Onglet suivant", category: "Fichier", keys: "Ctrl+Tab", alias: ["Ctrl+PageDown"], run: () => cycleTab(1) },
@@ -100,12 +104,13 @@ export function App() {
       <div className="body">
         <nav className="activity" aria-label="Barre d’activité">
           <button title="Explorateur (Ctrl+Maj+E)" aria-pressed={view === "explorer"} onClick={() => { setView("explorer"); update({ sidebarVisible: true }); }}><Icon n="files" /></button>
+          <button title="SFTP (Ctrl+Maj+Y)" aria-pressed={view === "sftp"} onClick={() => { setView("sftp"); update({ sidebarVisible: true }); }}><Icon n="server" /></button>
           {FUTURE.map(([n, ic]) => <button key={n} disabled title={n + " — prévu, pas encore disponible"}><Icon n={ic} /></button>)}
           <button className="bottom" title="Paramètres (Ctrl+,)" aria-pressed={view === "settings"} onClick={() => setView("settings")}><Icon n="gear" /></button>
         </nav>
         {s.sidebarVisible && <><aside className="sidebar" style={{ width: s.sidebarWidth }}>
-          <h2>Explorateur</h2>
-          <Explorer />
+          <h2>{view === "sftp" ? "SFTP" : "Explorateur"}</h2>
+          {view === "sftp" ? <Sftp /> : <Explorer />}
         </aside><div className="resizer v" onPointerDown={drag("x")} role="separator" aria-orientation="vertical" /></>}
         <main className="main">
           <div className="editor">
@@ -196,7 +201,8 @@ function Gallery({ base }: { base: "dark" | "light" }) {
 
 function StatusBar({ themeName }: { themeName: string }) {
   const c = useSyncExternalStore(subscribeCursor, getCursor);
-  return <footer className="status"><span>v0.1.0</span><span className="grow" />
+  const sf = useSyncExternalStore(subscribeSftp, getSftp);
+  return <footer className="status"><span>v0.1.0</span>{sf.connected && <span>SFTP : {sf.connected.name}</span>}<span className="grow" />
     {c && <><span>Ln {c.ln}, Col {c.col}</span><span>{c.lang}</span><span>{c.eol}</span><span>Espaces : {c.tab}</span></>}<span>{themeName}</span></footer>;
 }
 

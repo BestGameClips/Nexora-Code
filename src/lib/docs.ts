@@ -5,7 +5,7 @@ import { inTauri } from "./settings";
 
 export interface Tab { path: string; name: string; dirty: boolean; }
 export interface DocsState { tabs: Tab[]; active: string | null; root: string | null; error: string | null; treeVersion: number; }
-interface Doc { model: monaco.editor.ITextModel; saved: number; }
+interface Doc { model: monaco.editor.ITextModel; saved: number; remote?: { path: string; mtime: number | null }; }
 const docs = new Map<string, Doc>();
 const pending = new Set<string>();
 const subs = new Set<() => void>();
@@ -37,14 +37,21 @@ export async function openFile(path: string) {
   finally { pending.delete(path); }
 }
 
-export async function save() {
-  const path = state.active; const d = path ? docs.get(path) : undefined;
-  if (!path || !d) return;
+async function persist(path: string, force = false): Promise<void> {
+  const d = docs.get(path); if (!d) return;
   try {
-    await invoke("write_file", { path, content: d.model.getValue() });
+    if (d.remote) {
+      const r = await invoke<{ mtime: number | null }>("sftp_write", { path: d.remote.path, content: d.model.getValue(), expectedMtime: d.remote.mtime, force });
+      d.remote.mtime = r.mtime;
+    } else await invoke("write_file", { path, content: d.model.getValue() });
     d.saved = d.model.getAlternativeVersionId(); setDirty(path, false);
-  } catch (e) { set({ error: `Enregistrement impossible : ${e}` }); }
+  } catch (e) {
+    const conflict = String(e) === "CONFLICT";
+    if (conflict && !force && window.confirm("Le fichier distant a été modifié depuis son ouverture. Écraser la version distante ?")) return persist(path, true);
+    set({ error: conflict ? "Enregistrement annulé : conflit avec la version distante. Vos modifications restent dans l’onglet." : `Enregistrement impossible : ${e} (vos modifications restent dans l’onglet)` });
+  }
 }
+export const save = async () => { if (state.active) await persist(state.active); };
 
 export function close(path: string) {
   const t = state.tabs.find((x) => x.path === path); if (!t) return;
@@ -68,13 +75,7 @@ export async function openFolder() {
   } catch (e) { set({ error: `Ouverture du dossier impossible : ${e}` }); }
 }
 
-export async function saveAll() {
-  for (const t of state.tabs) {
-    const d = t.dirty ? docs.get(t.path) : undefined; if (!d) continue;
-    try { await invoke("write_file", { path: t.path, content: d.model.getValue() }); d.saved = d.model.getAlternativeVersionId(); setDirty(t.path, false); }
-    catch (e) { set({ error: `Enregistrement de ${t.name} impossible : ${e}` }); }
-  }
-}
+export async function saveAll() { for (const t of state.tabs) if (t.dirty) await persist(t.path); }
 export function cycleTab(dir: 1 | -1) {
   const n = state.tabs.length; const i = state.tabs.findIndex((t) => t.path === state.active);
   if (n > 1 && i >= 0) set({ active: state.tabs[(i + dir + n) % n].path });
@@ -89,3 +90,18 @@ let cursor: Cursor | null = null; const csubs = new Set<() => void>();
 export const getCursor = () => cursor;
 export const subscribeCursor = (f: () => void) => { csubs.add(f); return () => { csubs.delete(f); }; };
 export function setCursor(c: Cursor | null) { if (JSON.stringify(c) === JSON.stringify(cursor)) return; cursor = c; csubs.forEach((f) => f()); }
+
+export async function openRemote(remotePath: string) {
+  const key = "sftp:" + remotePath;
+  if (docs.has(key)) return set({ active: key });
+  if (pending.has(key)) return;
+  pending.add(key);
+  try {
+    const f = await invoke<{ content: string; mtime: number | null }>("sftp_read", { path: remotePath });
+    const model = monaco.editor.createModel(f.content, undefined, monaco.Uri.from({ scheme: "sftp", path: remotePath }));
+    docs.set(key, { model, saved: model.getAlternativeVersionId(), remote: { path: remotePath, mtime: f.mtime } });
+    model.onDidChangeContent(() => { const x = docs.get(key); if (x) setDirty(key, model.getAlternativeVersionId() !== x.saved); });
+    set({ tabs: [...state.tabs, { path: key, name: basename(remotePath), dirty: false }], active: key, error: null });
+  } catch (e) { set({ error: `Ouverture distante impossible : ${e}` }); }
+  finally { pending.delete(key); }
+}

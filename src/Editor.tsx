@@ -36,7 +36,7 @@ export function Workbench({ welcome, theme }: { welcome: ReactNode; theme: Theme
     {st.error && <div className="banner" role="alert"><span>{st.error}</span><button onClick={dismissError}>Fermer</button></div>}
     {has && <div className="tabs" role="tablist">{st.tabs.map((t) => (
       <div key={t.path} role="tab" aria-selected={t.path === st.active} className="tab" title={t.path} onClick={() => setActive(t.path)} onAuxClick={() => close(t.path)}>
-        <Icon n="file" size={14} /><span>{t.name}</span>{t.dirty && <i className="dot" role="img" aria-label="Modifications non enregistrées" />}
+        <Icon n={t.path.startsWith("sftp:") ? "server" : "file"} size={14} /><span>{t.name}</span>{t.dirty && <i className="dot" role="img" aria-label="Modifications non enregistrées" />}
         <button aria-label={"Fermer " + t.name} onClick={(e) => { e.stopPropagation(); close(t.path); }}><Icon n="close" size={12} /></button>
       </div>))}</div>}
     <div className="host" ref={host} style={{ display: has ? "block" : "none" }} />

@@ -6,6 +6,7 @@ const P: Record<string, string> = {
   ext: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
   gear: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
   file: "M7 3h7l5 5v13H7zM14 3v5h5", chev: "M9 6l6 6-6 6",
+  server: "M4 5h16v6H4zM4 13h16v6H4zM8 8h.01M8 16h.01",
   min: "M5 12h14", max: "M6 6h12v12H6z", restore: "M9 9V5h10v10h-4M5 9h10v10H5z", close: "M6 6l12 12M18 6L6 18",
 };
 export type IconName = keyof typeof P;
