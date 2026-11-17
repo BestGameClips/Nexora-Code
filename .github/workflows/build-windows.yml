@@ -19,7 +19,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory portable | Out-Null
-          Copy-Item src-tauri/target/release/rustide.exe portable/
+          Copy-Item src-tauri/target/release/rustide.exe portable/Nexora.exe
           New-Item portable/portable.flag -ItemType File | Out-Null
       - uses: actions/upload-artifact@v4
         with:
