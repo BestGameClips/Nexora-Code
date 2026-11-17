@@ -1,18 +1,20 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "./lib/icons";
 import { FileIcon } from "./lib/fileicons";
 import { inTauri } from "./lib/settings";
 import { openRemote } from "./lib/docs";
-import { getSftp, subscribeSftp, loadProfiles, saveProfile, deleteProfile, connect, disconnect, cancelTrust, dismissSftpError, forgetHost, type Profile } from "./lib/sftp";
+import { newFile, newFolder, renameEntry, deleteEntry } from "./lib/sftpops";
+import { getSftp, subscribeSftp, loadProfiles, saveProfile, deleteProfile, connect, disconnect, cancelTrust, dismissSftpError, forgetHost, closeAsk, refreshTree, withReconnect, type Profile } from "./lib/sftp";
 
 interface RE { name: string; path: string; is_dir: boolean; size: number; }
 const sortE = (l: RE[]) => [...l].sort((a, b) => Number(b.is_dir) - Number(a.is_dir) || a.name.localeCompare(b.name, undefined, { numeric: true }));
 
 function RChildren({ path, depth }: { path: string; depth: number }) {
   const [items, setItems] = useState<RE[] | null>(null); const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { invoke<RE[]>("sftp_list", { path }).then((r) => setItems(sortE(r))).catch((e) => setErr(String(e))); }, [path]);
+  const tick = useSyncExternalStore(subscribeSftp, () => getSftp().tick);
+  useEffect(() => { withReconnect(() => invoke<RE[]>("sftp_list", { path })).then((r) => { setItems(sortE(r)); setErr(null); }).catch((e) => setErr(String(e))); }, [path, tick]);
   if (err) return <div className="terr">{err}</div>;
   if (!items) return <p className="empty">Chargement…</p>;
   if (!items.length) return <p className="empty">Dossier vide</p>;
@@ -21,8 +23,16 @@ function RChildren({ path, depth }: { path: string; depth: number }) {
 function RNode({ e, depth }: { e: RE; depth: number }) {
   const [open, setOpen] = useState(false);
   return (<>
-    <button className="tnode" style={{ paddingLeft: 6 + depth * 14 }} onClick={() => (e.is_dir ? setOpen(!open) : void openRemote(e.path))} role="treeitem" aria-expanded={e.is_dir ? open : undefined}>
-      <span className={"chev" + (open ? " open" : "")}>{e.is_dir && <Icon n="chev" size={12} />}</span><FileIcon name={e.name} dir={e.is_dir} /><span className="tname">{e.name}</span></button>
+    <div className="trow">
+      <button className="tnode" style={{ paddingLeft: 6 + depth * 14 }} onClick={() => (e.is_dir ? setOpen(!open) : void openRemote(e.path))} role="treeitem" aria-expanded={e.is_dir ? open : undefined}>
+        <span className={"chev" + (open ? " open" : "")}>{e.is_dir && <Icon n="chev" size={12} />}</span><FileIcon name={e.name} dir={e.is_dir} /><span className="tname">{e.name}</span></button>
+      <span className="ract">
+        {e.is_dir && <><button aria-label={"Nouveau fichier dans " + e.name} title="Nouveau fichier" onClick={() => newFile(e.path)}><Icon n="plus" size={13} /></button>
+          <button aria-label={"Nouveau dossier dans " + e.name} title="Nouveau dossier" onClick={() => newFolder(e.path)}><Icon n="folderplus" size={13} /></button></>}
+        <button aria-label={"Renommer " + e.name} title="Renommer" onClick={() => renameEntry(e)}><Icon n="pen" size={13} /></button>
+        <button aria-label={"Supprimer " + e.name} title="Supprimer" onClick={() => deleteEntry(e)}><Icon n="trash" size={13} /></button>
+      </span>
+    </div>
     {open && e.is_dir && <RChildren path={e.path} depth={depth + 1} />}
   </>);
 }
@@ -43,6 +53,7 @@ export function Sftp() {
     if (await saveProfile({ ...form, name: form.name.trim(), host: form.host.trim(), user: form.user.trim() })) setForm(null);
   };
   return (<>
+    {s.ask && <AskName />}
     {s.error && <div className="banner col" role="alert"><span>{s.error}</span><span className="row2">
       {s.changedFor && <button onClick={() => forgetHost(s.changedFor!)}>Oublier l’ancienne empreinte</button>}<button onClick={dismissSftpError}>Fermer</button></span></div>}
     {s.trust && <div className="emptybox"><strong>Nouveau serveur</strong><span>Empreinte SHA256 :</span><code className="fp">{s.trust.fp}</code>
@@ -50,6 +61,7 @@ export function Sftp() {
       <button className="btn" onClick={() => connect(s.trust!.id, s.trust!.secret, s.trust!.fp)}>Faire confiance et se connecter</button><button onClick={cancelTrust}>Annuler</button></div>}
     {s.connected ? (<>
       <div className="rootname"><span title={s.connected.home}>{s.connected.name}</span><button onClick={disconnect}>Déconnecter</button></div>
+      <div className="row2 tools"><button onClick={() => newFile(s.connected!.home)} title="Nouveau fichier à la racine"><Icon n="plus" size={14} /></button><button onClick={() => newFolder(s.connected!.home)} title="Nouveau dossier à la racine"><Icon n="folderplus" size={14} /></button><button onClick={refreshTree} title="Actualiser"><Icon n="refresh" size={14} /></button></div>
       <div role="tree" key={s.connected.id}><RChildren path={s.connected.home} depth={0} /></div>
     </>) : form ? (
       <div className="sform">
@@ -76,4 +88,13 @@ export function Sftp() {
       <button className="btn" style={{ marginTop: 10 }} onClick={() => setForm(blank())}>Nouvelle connexion</button>
     </>)}
   </>);
+}
+
+function AskName() {
+  const a = getSftp().ask!; const [v, setV] = useState(a.initial); const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { ref.current?.focus(); ref.current?.select(); }, []);
+  const ok = () => { const n = v.trim(); closeAsk(); if (n) a.run(n); };
+  return <div className="overlay" onMouseDown={closeAsk}><div className="palette" role="dialog" aria-label={a.title} onMouseDown={(e) => e.stopPropagation()}>
+    <input ref={ref} value={v} placeholder={a.title} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") closeAsk(); else if (e.key === "Enter") ok(); }} />
+    <p className="empty hint">{a.title} : Entrée pour valider, Échap pour annuler.</p></div></div>;
 }

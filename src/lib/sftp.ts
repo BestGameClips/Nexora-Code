@@ -2,8 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { inTauri } from "./settings";
 
 export interface Profile { id: string; name: string; host: string; port: number; user: string; auth: "password" | "key"; key_path?: string | null; }
-export interface SftpStore { profiles: Profile[]; connected: { id: string; name: string; home: string } | null; busy: boolean; error: string | null; changedFor: string | null; trust: { id: string; secret?: string; fp: string } | null; }
-let st: SftpStore = { profiles: [], connected: null, busy: false, error: null, changedFor: null, trust: null };
+export interface SftpStore { profiles: Profile[]; connected: { id: string; name: string; home: string } | null; busy: boolean; error: string | null; changedFor: string | null; trust: { id: string; secret?: string; fp: string } | null; tick: number; ask: { title: string; initial: string; run: (name: string) => Promise<void> } | null; lastConn: { id: string; secret?: string } | null; }
+let st: SftpStore = { profiles: [], connected: null, busy: false, error: null, changedFor: null, trust: null, tick: 0, ask: null, lastConn: null };
 const subs = new Set<() => void>();
 const set = (p: Partial<SftpStore>) => { st = { ...st, ...p }; subs.forEach((f) => f()); };
 export const getSftp = () => st;
@@ -29,7 +29,7 @@ export async function connect(id: string, secret?: string, trust?: string) {
   set({ busy: true, error: null, changedFor: null, trust: null });
   try {
     const home = await invoke<string>("sftp_connect", { id, secret: secret ?? null, trust: trust ?? null });
-    set({ connected: { id, name: prof.name, home }, busy: false });
+    set({ connected: { id, name: prof.name, home }, busy: false, lastConn: { id, secret } });
   } catch (e) {
     const m = String(e);
     if (m.startsWith("UNKNOWN_HOST|")) set({ busy: false, trust: { id, secret, fp: m.split("|")[1] } });
@@ -38,4 +38,25 @@ export async function connect(id: string, secret?: string, trust?: string) {
     else set({ busy: false, error: m });
   }
 }
-export async function disconnect() { try { await invoke("sftp_disconnect"); } catch { /* déjà fermé */ } set({ connected: null }); }
+export async function disconnect() { try { await invoke("sftp_disconnect"); } catch { /* déjà fermé */ } set({ connected: null, lastConn: null }); }
+
+export const refreshTree = () => set({ tick: st.tick + 1 });
+export const askName = (title: string, initial: string, run: (name: string) => Promise<void>) => set({ ask: { title, initial, run } });
+export const closeAsk = () => set({ ask: null });
+
+// Reconnexion automatique : le secret reste uniquement en mémoire (jamais sur disque).
+const NET = /closed|reset|broken|timed? ?out|connection|eof|disconnect|non connecté|channel/i;
+async function reconnect(): Promise<boolean> {
+  const l = st.lastConn; if (!l) return false;
+  set({ busy: true });
+  try { await invoke("sftp_connect", { id: l.id, secret: l.secret ?? null, trust: null }); set({ busy: false }); return true; }
+  catch (e) { set({ busy: false, connected: null, lastConn: null, error: `Connexion perdue, reconnexion impossible : ${e}` }); return false; }
+}
+export async function withReconnect<T>(fn: () => Promise<T>): Promise<T> {
+  try { return await fn(); }
+  catch (e) { if (!st.lastConn || !NET.test(String(e)) || !(await reconnect())) throw e; return await fn(); }
+}
+/** Exécute une opération distante en affichant l'erreur dans le panneau SFTP. */
+export async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
+  try { return await withReconnect(fn); } catch (e) { set({ error: String(e) }); return undefined; }
+}

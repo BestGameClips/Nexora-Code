@@ -106,7 +106,7 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![load_settings, save_settings, set_root, list_dir, read_file, write_file, create_file, sftp::profiles_list, sftp::profile_save, sftp::profile_delete, sftp::host_forget, sftp::sftp_connect, sftp::sftp_disconnect, sftp::sftp_list, sftp::sftp_read, sftp::sftp_write, discord::discord_connect, discord::discord_update, discord::discord_disconnect])
+        .invoke_handler(tauri::generate_handler![load_settings, save_settings, set_root, list_dir, read_file, write_file, create_file, sftp::profiles_list, sftp::profile_save, sftp::profile_delete, sftp::host_forget, sftp::sftp_connect, sftp::sftp_disconnect, sftp::sftp_list, sftp::sftp_read, sftp::sftp_write, sftp::sftp_create_file, sftp::sftp_mkdir, sftp::sftp_rename, sftp::sftp_remove, discord::discord_connect, discord::discord_update, discord::discord_disconnect])
         .run(tauri::generate_context!())
         .expect("erreur au lancement de l'application");
 }

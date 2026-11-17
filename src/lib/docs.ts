@@ -2,6 +2,7 @@ import * as monaco from "monaco-editor";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { inTauri } from "./settings";
+import { withReconnect } from "./sftp";
 
 export interface Tab { path: string; name: string; dirty: boolean; }
 export interface DocsState { tabs: Tab[]; active: string | null; root: string | null; error: string | null; treeVersion: number; }
@@ -41,7 +42,7 @@ async function persist(path: string, force = false): Promise<void> {
   const d = docs.get(path); if (!d) return;
   try {
     if (d.remote) {
-      const r = await invoke<{ mtime: number | null }>("sftp_write", { path: d.remote.path, content: d.model.getValue(), expectedMtime: d.remote.mtime, force });
+      const r = await withReconnect(() => invoke<{ mtime: number | null }>("sftp_write", { path: d.remote!.path, content: d.model.getValue(), expectedMtime: d.remote!.mtime, force }));
       d.remote.mtime = r.mtime;
     } else await invoke("write_file", { path, content: d.model.getValue() });
     d.saved = d.model.getAlternativeVersionId(); setDirty(path, false);
@@ -97,7 +98,7 @@ export async function openRemote(remotePath: string) {
   if (pending.has(key)) return;
   pending.add(key);
   try {
-    const f = await invoke<{ content: string; mtime: number | null }>("sftp_read", { path: remotePath });
+    const f = await withReconnect(() => invoke<{ content: string; mtime: number | null }>("sftp_read", { path: remotePath }));
     const model = monaco.editor.createModel(f.content, undefined, monaco.Uri.from({ scheme: "sftp", path: remotePath }));
     docs.set(key, { model, saved: model.getAlternativeVersionId(), remote: { path: remotePath, mtime: f.mtime } });
     model.onDidChangeContent(() => { const x = docs.get(key); if (x) setDirty(key, model.getAlternativeVersionId() !== x.saved); });

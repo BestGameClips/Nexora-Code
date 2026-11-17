@@ -157,3 +157,49 @@ pub async fn sftp_write(state: State<'_, SftpState>, path: String, content: Stri
     f.shutdown().await.map_err(es)?;
     Ok(WriteRes { mtime: s.metadata(path).await.map_err(es)?.mtime })
 }
+
+fn valid_name(n: &str) -> Result<(), String> {
+    if n.is_empty() || n == "." || n == ".." || n.contains('/') || n.contains('\0') { Err("Nom invalide".into()) } else { Ok(()) }
+}
+fn child(dir: &str, name: &str) -> String { format!("{}/{}", dir.trim_end_matches('/'), name) }
+
+/// Les créations et renommages refusent d'écraser un nom existant.
+#[tauri::command]
+pub async fn sftp_create_file(state: State<'_, SftpState>, dir: String, name: String) -> Result<String, String> {
+    valid_name(&name)?;
+    let g = state.0.lock().await; let s = &g.as_ref().ok_or("Non connecté")?.sftp;
+    let path = child(&dir, &name);
+    if s.try_exists(path.clone()).await.map_err(es)? { return Err("Ce nom existe déjà".into()); }
+    let mut f = s.open_with_flags(path.clone(), OpenFlags::CREATE | OpenFlags::WRITE).await.map_err(es)?;
+    f.shutdown().await.map_err(es)?;
+    Ok(path)
+}
+
+#[tauri::command]
+pub async fn sftp_mkdir(state: State<'_, SftpState>, dir: String, name: String) -> Result<(), String> {
+    valid_name(&name)?;
+    let g = state.0.lock().await; let s = &g.as_ref().ok_or("Non connecté")?.sftp;
+    let path = child(&dir, &name);
+    if s.try_exists(path.clone()).await.map_err(es)? { return Err("Ce nom existe déjà".into()); }
+    s.create_dir(path).await.map(|_| ()).map_err(es)
+}
+
+#[tauri::command]
+pub async fn sftp_rename(state: State<'_, SftpState>, path: String, new_name: String) -> Result<String, String> {
+    valid_name(&new_name)?;
+    let g = state.0.lock().await; let s = &g.as_ref().ok_or("Non connecté")?.sftp;
+    let parent = path.rsplit_once('/').map(|x| x.0).unwrap_or("");
+    let dest = format!("{}/{}", parent, new_name);
+    if s.try_exists(dest.clone()).await.map_err(es)? { return Err("Ce nom existe déjà".into()); }
+    s.rename(path, dest.clone()).await.map(|_| ()).map_err(es)?;
+    Ok(dest)
+}
+
+/// Supprime un fichier ou un dossier VIDE (jamais de suppression récursive).
+#[tauri::command]
+pub async fn sftp_remove(state: State<'_, SftpState>, path: String, is_dir: bool) -> Result<(), String> {
+    if path.is_empty() || path == "/" { return Err("Suppression refusée".into()); }
+    let g = state.0.lock().await; let s = &g.as_ref().ok_or("Non connecté")?.sftp;
+    (if is_dir { s.remove_dir(path).await.map(|_| ()) } else { s.remove_file(path).await.map(|_| ()) })
+        .map_err(|e| if is_dir { format!("Impossible de supprimer le dossier (est-il vide ?) : {e}") } else { es(e) })
+}
