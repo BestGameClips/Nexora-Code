@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getSettings, subscribe, update, inTauri, type Mode } from "./lib/settings";
 import { register, all, keyOf, runByKeys, fuzzy } from "./lib/commands";
+import { Icon, type IconName } from "./lib/icons";
 
 type View = "explorer" | "settings";
 const useSettings = () => useSyncExternalStore(subscribe, getSettings);
+const FUTURE: [string, IconName][] = [["Recherche", "search"], ["Git", "git"], ["Débogage", "bug"], ["Extensions", "ext"]];
 
 export function App() {
   const s = useSettings();
@@ -25,7 +27,10 @@ export function App() {
     r.dataset.theme = theme;
     r.classList.toggle("mica", s.mica);
     r.style.setProperty("--fs", s.fontSize + "px");
-  }, [theme, s.mica, s.fontSize]);
+    r.style.setProperty("--r", (s.rounded ? s.radius : 0) + "px");
+    r.style.setProperty("--rl", (s.rounded ? s.radius * 1.5 : 0) + "px");
+    r.style.setProperty("--rp", s.rounded ? "999px" : "0px");
+  }, [theme, s.mica, s.fontSize, s.rounded, s.radius]);
 
   useEffect(() => {
     register([
@@ -34,6 +39,7 @@ export function App() {
       { id: "ide.explorer.focus", title: "Afficher l’explorateur", category: "Affichage", keys: "Ctrl+Shift+E", run: () => { setView("explorer"); update({ sidebarVisible: true }); } },
       { id: "ide.sidebar.toggle", title: "Afficher/masquer la barre latérale", category: "Affichage", keys: "Ctrl+B", run: () => update({ sidebarVisible: !getSettings().sidebarVisible }) },
       { id: "ide.panel.toggle", title: "Afficher/masquer le panneau inférieur", category: "Affichage", keys: "Ctrl+J", run: () => update({ panelVisible: !getSettings().panelVisible }) },
+      { id: "ide.rounded.toggle", title: "Activer/désactiver les coins arrondis", category: "Apparence", run: () => update({ rounded: !getSettings().rounded }) },
       ...(["system", "light", "dark"] as Mode[]).map((m) => ({ id: "ide.theme." + m, title: "Thème : " + { system: "automatique", light: "clair", dark: "sombre" }[m], category: "Apparence", run: () => update({ mode: m }) })),
     ]);
     const onKey = (e: KeyboardEvent) => { const k = keyOf(e); if (k && runByKeys(k)) e.preventDefault(); };
@@ -42,7 +48,12 @@ export function App() {
   }, []);
 
   const win = inTauri ? getCurrentWindow() : null;
-  useEffect(() => { win?.isMaximized().then(setMaximized); const f = () => win?.isMaximized().then(setMaximized); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, [win]);
+  useEffect(() => {
+    if (!win) return;
+    const f = () => win.isMaximized().then(setMaximized);
+    f(); window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+  }, [win]);
 
   const drag = (axis: "x" | "y") => (e: React.PointerEvent) => {
     e.preventDefault();
@@ -53,56 +64,72 @@ export function App() {
   };
 
   return (
-    <div className="app">
+    <div className={"app" + (maximized ? " maxi" : "")}>
       <header className="titlebar" data-tauri-drag-region>
-        <span className="brand" data-tauri-drag-region>RustIDE Ultimate</span>
-        <button className="link" onClick={() => setPalette(true)}>Palette de commandes (Ctrl+Maj+P)</button>
-        {win && <div className="winctl">
-          <button aria-label="Réduire" onClick={() => win.minimize()}>–</button>
-          <button aria-label={maximized ? "Restaurer" : "Agrandir"} onClick={() => win.toggleMaximize()}>{maximized ? "❐" : "□"}</button>
-          <button aria-label="Fermer" className="close" onClick={() => win.close()}>✕</button>
-        </div>}
+        <div className="brand" data-tauri-drag-region><span className="logo" />RustIDE Ultimate</div>
+        <button className="cmdbar" onClick={() => setPalette(true)} aria-label="Ouvrir la palette de commandes">
+          <Icon n="search" size={14} /><span>Rechercher ou exécuter une commande</span><kbd>Ctrl+Maj+P</kbd>
+        </button>
+        {win ? <div className="winctl">
+          <button aria-label="Réduire" onClick={() => win.minimize()}><Icon n="min" size={14} w={1.4} /></button>
+          <button aria-label={maximized ? "Restaurer" : "Agrandir"} onClick={() => win.toggleMaximize()}><Icon n={maximized ? "restore" : "max"} size={14} w={1.4} /></button>
+          <button aria-label="Fermer" className="close" onClick={() => win.close()}><Icon n="close" size={14} w={1.4} /></button>
+        </div> : <div />}
       </header>
       <div className="body">
         <nav className="activity" aria-label="Barre d’activité">
-          <button title="Explorateur (Ctrl+Maj+E)" aria-pressed={view === "explorer"} onClick={() => { setView("explorer"); update({ sidebarVisible: true }); }}>▤</button>
-          {["Recherche", "Git", "Débogage", "Extensions"].map((n) => <button key={n} disabled title={n + " — prévu, pas encore disponible"}>○</button>)}
-          <button className="bottom" title="Paramètres (Ctrl+,)" aria-pressed={view === "settings"} onClick={() => setView("settings")}>⚙</button>
+          <button title="Explorateur (Ctrl+Maj+E)" aria-pressed={view === "explorer"} onClick={() => { setView("explorer"); update({ sidebarVisible: true }); }}><Icon n="files" /></button>
+          {FUTURE.map(([n, ic]) => <button key={n} disabled title={n + " — prévu, pas encore disponible"}><Icon n={ic} /></button>)}
+          <button className="bottom" title="Paramètres (Ctrl+,)" aria-pressed={view === "settings"} onClick={() => setView("settings")}><Icon n="gear" /></button>
         </nav>
         {s.sidebarVisible && <><aside className="sidebar" style={{ width: s.sidebarWidth }}>
           <h2>Explorateur</h2>
-          <p className="empty">Aucun dossier ouvert.<br />L’ouverture de dossiers locaux et SFTP arrive avec les modules 2 et 3.</p>
+          <div className="emptybox"><strong>Aucun dossier ouvert</strong><span>L’ouverture de dossiers locaux et SFTP arrive avec les prochains modules.</span></div>
         </aside><div className="resizer v" onPointerDown={drag("x")} role="separator" aria-orientation="vertical" /></>}
         <main className="main">
           <div className="editor">{view === "settings" ? <Settings /> : <Welcome />}</div>
           {s.panelVisible && <><div className="resizer h" onPointerDown={drag("y")} role="separator" aria-orientation="horizontal" />
-            <section className="panel" style={{ height: s.panelHeight }}><h2>Journal</h2><p className="empty">Aucun transfert. Le journal SFTP s’affichera ici.</p></section></>}
+            <section className="panel" style={{ height: s.panelHeight }}><h2>Journal</h2><p className="empty">Aucun transfert pour le moment. Le journal SFTP s’affichera ici.</p></section></>}
         </main>
       </div>
-      <footer className="status"><span>v0.1.0</span><span>Thème : {theme === "dark" ? "sombre" : "clair"}</span></footer>
+      <footer className="status"><span>v0.1.0</span><span>Thème {theme === "dark" ? "sombre" : "clair"}</span></footer>
       {palette && <Palette onClose={() => setPalette(false)} />}
     </div>
   );
 }
 
 const Welcome = () => (
-  <div className="page"><h1>RustIDE Ultimate</h1>
-    <p>Module 1 : coque de l’application. L’éditeur Monaco, les fichiers locaux et SFTP sont les prochains modules.</p>
-    <p>Essayez <kbd>Ctrl+Maj+P</kbd>, <kbd>Ctrl+B</kbd>, <kbd>Ctrl+J</kbd> ou <kbd>Ctrl+,</kbd>.</p></div>
+  <div className="page"><h1>Bienvenue</h1>
+    <p className="lead">RustIDE Ultimate, version 0.1 : la coque de l’application est prête. L’éditeur, les fichiers locaux et le SFTP arrivent ensuite.</p>
+    <p>Raccourcis : <kbd>Ctrl+Maj+P</kbd> palette · <kbd>Ctrl+B</kbd> barre latérale · <kbd>Ctrl+J</kbd> panneau · <kbd>Ctrl+,</kbd> paramètres</p></div>
+);
+
+const Row = ({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) => (
+  <div className="srow"><div><div className="st">{title}</div>{desc && <div className="sd">{desc}</div>}</div><div className="sc">{children}</div></div>
+);
+const Switch = ({ on, set, label }: { on: boolean; set: (v: boolean) => void; label: string }) => (
+  <button role="switch" aria-checked={on} aria-label={label} className="switch" onClick={() => set(!on)}><i /></button>
 );
 
 function Settings() {
   const s = useSettings();
+  const modes: [Mode, string][] = [["system", "Système"], ["light", "Clair"], ["dark", "Sombre"]];
   return (
     <div className="page"><h1>Paramètres</h1>
-      <label>Thème
-        <select value={s.mode} onChange={(e) => update({ mode: e.target.value as Mode })}>
-          <option value="system">Automatique (système)</option><option value="light">Clair</option><option value="dark">Sombre</option></select></label>
-      <label>Taille du texte ({s.fontSize}px)
-        <input type="range" min={10} max={24} value={s.fontSize} onChange={(e) => update({ fontSize: +e.target.value })} /></label>
-      <label className="row"><input type="checkbox" checked={s.mica} onChange={(e) => update({ mica: e.target.checked })} />
-        Effet Mica (Windows 11 uniquement ; désactivé par défaut)</label>
-      <button onClick={() => update({ sidebarWidth: 260, panelHeight: 180, sidebarVisible: true, panelVisible: true })}>Restaurer la disposition</button>
+      <h3>Apparence</h3>
+      <div className="card">
+        <Row title="Thème" desc="Le mode automatique suit Windows.">
+          <div className="seg" role="radiogroup" aria-label="Thème">{modes.map(([m, l]) => <button key={m} role="radio" aria-checked={s.mode === m} onClick={() => update({ mode: m })}>{l}</button>)}</div></Row>
+        <Row title="Coins arrondis" desc="Arrondit les boutons, la barre de recherche, les champs et les menus."><Switch on={s.rounded} set={(v) => update({ rounded: v })} label="Coins arrondis" /></Row>
+        <Row title={`Rayon des coins (${s.radius}px)`} desc="Désactivé quand les coins arrondis sont éteints."><input type="range" min={0} max={20} value={s.radius} disabled={!s.rounded} onChange={(e) => update({ radius: +e.target.value })} /></Row>
+        <Row title={`Taille du texte (${s.fontSize}px)`}><input type="range" min={10} max={24} value={s.fontSize} onChange={(e) => update({ fontSize: +e.target.value })} /></Row>
+        <Row title="Effet Mica" desc="Windows 11 uniquement. Laissez désactivé sous Windows 10."><Switch on={s.mica} set={(v) => update({ mica: v })} label="Effet Mica" /></Row>
+      </div>
+      <h3>Disposition</h3>
+      <div className="card"><Row title="Restaurer la disposition" desc="Remet les tailles et l’affichage des panneaux par défaut.">
+        <button className="btn" onClick={() => update({ sidebarWidth: 260, panelHeight: 180, sidebarVisible: true, panelVisible: true })}>Restaurer</button></Row></div>
+      <h3>Raccourcis clavier</h3>
+      <div className="card">{all().filter((c) => c.keys).map((c) => <Row key={c.id} title={c.title}><kbd>{c.keys}</kbd></Row>)}</div>
     </div>
   );
 }
