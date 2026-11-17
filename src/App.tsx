@@ -3,6 +3,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getSettings, subscribe, update, inTauri, type Mode } from "./lib/settings";
 import { register, all, keyOf, runByKeys, fuzzy } from "./lib/commands";
 import { Icon, type IconName } from "./lib/icons";
+import { Explorer } from "./Explorer";
+import { Workbench } from "./Editor";
+import { openFolder, save, close as closeTab, getDocs } from "./lib/docs";
 
 type View = "explorer" | "settings";
 const useSettings = () => useSyncExternalStore(subscribe, getSettings);
@@ -36,6 +39,9 @@ export function App() {
     register([
       { id: "ide.palette.open", title: "Ouvrir la palette de commandes", category: "Général", keys: "Ctrl+Shift+P", run: () => setPalette(true) },
       { id: "ide.settings.open", title: "Ouvrir les paramètres", category: "Général", keys: "Ctrl+,", run: () => setView("settings") },
+      { id: "ide.folder.open", title: "Ouvrir un dossier…", category: "Fichier", keys: "Ctrl+O", run: () => { openFolder(); } },
+      { id: "ide.file.save", title: "Enregistrer", category: "Fichier", keys: "Ctrl+S", run: () => { save(); } },
+      { id: "ide.tab.close", title: "Fermer l’onglet", category: "Fichier", keys: "Ctrl+W", run: () => { const t = getDocs().active; if (t) closeTab(t); } },
       { id: "ide.explorer.focus", title: "Afficher l’explorateur", category: "Affichage", keys: "Ctrl+Shift+E", run: () => { setView("explorer"); update({ sidebarVisible: true }); } },
       { id: "ide.sidebar.toggle", title: "Afficher/masquer la barre latérale", category: "Affichage", keys: "Ctrl+B", run: () => update({ sidebarVisible: !getSettings().sidebarVisible }) },
       { id: "ide.panel.toggle", title: "Afficher/masquer le panneau inférieur", category: "Affichage", keys: "Ctrl+J", run: () => update({ panelVisible: !getSettings().panelVisible }) },
@@ -84,10 +90,12 @@ export function App() {
         </nav>
         {s.sidebarVisible && <><aside className="sidebar" style={{ width: s.sidebarWidth }}>
           <h2>Explorateur</h2>
-          <div className="emptybox"><strong>Aucun dossier ouvert</strong><span>L’ouverture de dossiers locaux et SFTP arrive avec les prochains modules.</span></div>
+          <Explorer />
         </aside><div className="resizer v" onPointerDown={drag("x")} role="separator" aria-orientation="vertical" /></>}
         <main className="main">
-          <div className="editor">{view === "settings" ? <Settings /> : <Welcome />}</div>
+          <div className="editor">
+            <div className="scroll" style={{ display: view === "settings" ? "block" : "none" }}><Settings /></div>
+            <div className="workspace" style={{ display: view === "settings" ? "none" : "flex" }}><Workbench welcome={<Welcome />} theme={theme} fontSize={s.fontSize} /></div></div>
           {s.panelVisible && <><div className="resizer h" onPointerDown={drag("y")} role="separator" aria-orientation="horizontal" />
             <section className="panel" style={{ height: s.panelHeight }}><h2>Journal</h2><p className="empty">Aucun transfert pour le moment. Le journal SFTP s’affichera ici.</p></section></>}
         </main>

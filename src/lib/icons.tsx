@@ -5,6 +5,7 @@ const P: Record<string, string> = {
   bug: "M8 8h8v8a4 4 0 0 1-8 0zM9 4l1.5 2M15 4l-1.5 2M4 12h4M16 12h4M4 18l4-2M20 18l-4-2",
   ext: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
   gear: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
+  file: "M7 3h7l5 5v13H7zM14 3v5h5", chev: "M9 6l6 6-6 6",
   min: "M5 12h14", max: "M6 6h12v12H6z", restore: "M9 9V5h10v10h-4M5 9h10v10H5z", close: "M6 6l12 12M18 6L6 18",
 };
 export type IconName = keyof typeof P;
