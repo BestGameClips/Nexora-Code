@@ -7,12 +7,18 @@ import { Explorer } from "./Explorer";
 import { Sftp } from "./Sftp";
 import { getSftp, subscribeSftp, disconnect } from "./lib/sftp";
 import { Workbench } from "./Editor";
-import { openFolder, save, saveAll, cycleTab, createFile, close as closeTab, getDocs, getCursor, subscribeCursor } from "./lib/docs";
-import { THEMES, themeById, applyTheme } from "./lib/themes";
+import { openFolder, save, saveAll, cycleTab, createFile, close as closeTab, getDocs, getCursor, subscribeCursor, subscribeDocs, basename } from "./lib/docs";
+import { themeById, applyTheme } from "./lib/themes";
+import { Gallery } from "./Gallery";
+import { Welcome } from "./Welcome";
+import { Extensions } from "./Extensions";
+import { extOn } from "./lib/extensions";
+import { buildPresence } from "./lib/presence";
+import { FileIcon } from "./lib/fileicons";
 
-type View = "explorer" | "settings" | "sftp";
+type View = "explorer" | "settings" | "sftp" | "extensions" | "welcome";
 const useSettings = () => useSyncExternalStore(subscribe, getSettings);
-const FUTURE: [string, IconName][] = [["Recherche", "search"], ["Git", "git"], ["Débogage", "bug"], ["Extensions", "ext"]];
+const FUTURE: [string, IconName][] = [["Recherche", "search"], ["Git", "git"], ["Débogage", "bug"]];
 
 export function App() {
   const s = useSettings();
@@ -45,6 +51,9 @@ export function App() {
     register([
       { id: "ide.palette.open", title: "Ouvrir la palette de commandes", category: "Général", keys: "Ctrl+Shift+P", alias: ["F1"], run: () => setPalette(true) },
       { id: "ide.settings.open", title: "Ouvrir les paramètres", category: "Général", keys: "Ctrl+,", run: () => setView("settings") },
+      { id: "ide.extensions.focus", title: "Afficher les extensions", category: "Extensions", keys: "Ctrl+Shift+X", run: () => { setView("extensions"); update({ sidebarVisible: true }); } },
+      { id: "ide.welcome.open", title: "Ouvrir l’accueil", category: "Aide", run: () => setView("welcome") },
+      { id: "ide.markdown.preview", title: "Aperçu Markdown : afficher/masquer", category: "Éditeur", keys: "Ctrl+Shift+V", run: () => { if (extOn("markdown")) update({ mdPreview: !getSettings().mdPreview }); } },
       { id: "ide.sftp.focus", title: "Afficher SFTP", category: "SFTP", keys: "Ctrl+Shift+Y", run: () => { setView("sftp"); update({ sidebarVisible: true }); } },
       { id: "ide.sftp.disconnect", title: "Se déconnecter du serveur SFTP", category: "SFTP", run: () => { disconnect(); } },
       { id: "ide.file.new", title: "Nouveau fichier…", category: "Fichier", keys: "Ctrl+N", run: () => setNewFile(true) },
@@ -105,17 +114,19 @@ export function App() {
         <nav className="activity" aria-label="Barre d’activité">
           <button title="Explorateur (Ctrl+Maj+E)" aria-pressed={view === "explorer"} onClick={() => { setView("explorer"); update({ sidebarVisible: true }); }}><Icon n="files" /></button>
           <button title="SFTP (Ctrl+Maj+Y)" aria-pressed={view === "sftp"} onClick={() => { setView("sftp"); update({ sidebarVisible: true }); }}><Icon n="server" /></button>
+          <button title="Extensions (Ctrl+Maj+X)" aria-pressed={view === "extensions"} onClick={() => { setView("extensions"); update({ sidebarVisible: true }); }}><Icon n="ext" /></button>
           {FUTURE.map(([n, ic]) => <button key={n} disabled title={n + " — prévu, pas encore disponible"}><Icon n={ic} /></button>)}
           <button className="bottom" title="Paramètres (Ctrl+,)" aria-pressed={view === "settings"} onClick={() => setView("settings")}><Icon n="gear" /></button>
         </nav>
         {s.sidebarVisible && <><aside className="sidebar" style={{ width: s.sidebarWidth }}>
-          <h2>{view === "sftp" ? "SFTP" : "Explorateur"}</h2>
-          {view === "sftp" ? <Sftp /> : <Explorer />}
+          <h2>{view === "sftp" ? "SFTP" : view === "extensions" ? "Extensions" : "Explorateur"}</h2>
+          {view === "sftp" ? <Sftp /> : view === "extensions" ? <Extensions /> : <Explorer />}
         </aside><div className="resizer v" onPointerDown={drag("x")} role="separator" aria-orientation="vertical" /></>}
         <main className="main">
           <div className="editor">
             <div className="scroll" style={{ display: view === "settings" ? "block" : "none" }}><Settings /></div>
-            <div className="workspace" style={{ display: view === "settings" ? "none" : "flex" }}><Workbench welcome={<Welcome />} theme={themeDef} /></div></div>
+            <div className="scroll" style={{ display: view === "welcome" ? "block" : "none" }}><Welcome onOpen={() => { setView("explorer"); update({ sidebarVisible: true }); openFolder(); }} onSftp={() => { setView("sftp"); update({ sidebarVisible: true }); }} /></div>
+            <div className="workspace" style={{ display: view === "settings" || view === "welcome" ? "none" : "flex" }}><Workbench welcome={s.showWelcome ? <Welcome onOpen={() => { setView("explorer"); update({ sidebarVisible: true }); openFolder(); }} onSftp={() => { setView("sftp"); update({ sidebarVisible: true }); }} /> : <p className="page empty">Aucun fichier ouvert. Ctrl+O pour ouvrir un dossier.</p>} theme={themeDef} /></div></div>
           {s.panelVisible && <><div className="resizer h" onPointerDown={drag("y")} role="separator" aria-orientation="horizontal" />
             <section className="panel" style={{ height: s.panelHeight }}><h2>Journal</h2><p className="empty">Aucun transfert pour le moment. Le journal SFTP s’affichera ici.</p></section></>}
         </main>
@@ -127,11 +138,6 @@ export function App() {
   );
 }
 
-const Welcome = () => (
-  <div className="page"><h1>Bienvenue</h1>
-    <p className="lead">RustIDE Ultimate, version 0.1 : la coque de l’application est prête. L’éditeur, les fichiers locaux et le SFTP arrivent ensuite.</p>
-    <p>Raccourcis : <kbd>Ctrl+Maj+P</kbd> palette · <kbd>Ctrl+B</kbd> barre latérale · <kbd>Ctrl+J</kbd> panneau · <kbd>Ctrl+,</kbd> paramètres</p></div>
-);
 
 const Row = ({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) => (
   <div className="srow"><div><div className="st">{title}</div>{desc && <div className="sd">{desc}</div>}</div><div className="sc">{children}</div></div>
@@ -145,6 +151,11 @@ function Settings() {
   const modes: [Mode, string][] = [["system", "Système"], ["light", "Clair"], ["dark", "Sombre"]];
   return (
     <div className="page"><h1>Paramètres</h1>
+      <h3>Général</h3>
+      <div className="card">
+        <Row title="Langue" desc="Langue de l’écran d’accueil ; le reste de l’interface sera traduit progressivement."><div className="seg" role="radiogroup" aria-label="Langue">{(["fr", "en"] as const).map((l) => <button key={l} role="radio" aria-checked={s.language === l} onClick={() => update({ language: l })}>{l === "fr" ? "Français" : "English"}</button>)}</div></Row>
+        <Row title="Afficher l’accueil" desc="Quand aucun fichier n’est ouvert."><Switch on={s.showWelcome} set={(v) => update({ showWelcome: v })} label="Afficher l’accueil" /></Row>
+      </div>
       <h3>Thèmes sombres</h3><Gallery base="dark" /><h3>Thèmes clairs</h3><Gallery base="light" />
       <h3>Apparence</h3>
       <div className="card">
@@ -160,6 +171,20 @@ function Settings() {
         <Row title="Numéros de ligne" desc="Affichés dans la marge de gauche."><Switch on={s.lineNumbers} set={(v) => update({ lineNumbers: v })} label="Numéros de ligne" /></Row>
         <Row title="Minimap"><Switch on={s.minimap} set={(v) => update({ minimap: v })} label="Minimap" /></Row>
         <Row title="Retour à la ligne automatique" desc="Raccourci : Alt+Z"><Switch on={s.wordWrap} set={(v) => update({ wordWrap: v })} label="Retour à la ligne" /></Row>
+      </div>
+      <h3>Icônes de fichiers</h3>
+      <div className="card"><Row title="Jeu d’icônes" desc={extOn("icons") ? "Badges colorés par langage, ou icônes minimales." : "L’extension « Icônes de fichiers » est désactivée pour cet espace."}>
+        <div className="seg" role="radiogroup" aria-label="Jeu d’icônes">{([["badges", "Badges"], ["minimal", "Minimal"], ["none", "Aucun"]] as const).map(([k, l]) => <button key={k} role="radio" aria-checked={s.iconPack === k} onClick={() => update({ iconPack: k })}>{l}</button>)}</div></Row></div>
+      <h3>Discord Rich Presence</h3>
+      <div className="card">
+        {!extOn("discord") && <p className="sd pad">L’extension est désactivée pour cet espace de travail (onglet Extensions).</p>}
+        <Row title="Activer" desc="La connexion à Discord arrive dans un prochain module ; ces réglages sont déjà enregistrés."><Switch on={s.discord.enabled} set={(v) => update({ discord: { ...s.discord, enabled: v } })} label="Discord" /></Row>
+        <Row title="Afficher le nom du fichier"><Switch on={s.discord.showFile} set={(v) => update({ discord: { ...s.discord, showFile: v } })} label="Nom du fichier" /></Row>
+        <Row title="Afficher le nom du projet"><Switch on={s.discord.showProject} set={(v) => update({ discord: { ...s.discord, showProject: v } })} label="Nom du projet" /></Row>
+        <Row title="Afficher le langage"><Switch on={s.discord.showLanguage} set={(v) => update({ discord: { ...s.discord, showLanguage: v } })} label="Langage" /></Row>
+        <Row title="Afficher le temps écoulé"><Switch on={s.discord.showTime} set={(v) => update({ discord: { ...s.discord, showTime: v } })} label="Temps écoulé" /></Row>
+        <Row title="Texte personnalisé"><input type="text" maxLength={64} value={s.discord.text} onChange={(e) => update({ discord: { ...s.discord, text: e.target.value } })} /></Row>
+        <div className="srow"><PresenceCard /></div>
       </div>
       <h3>Disposition</h3>
       <div className="card"><Row title="Restaurer la disposition" desc="Remet les tailles et l’affichage des panneaux par défaut.">
@@ -191,13 +216,6 @@ function Palette({ onClose }: { onClose: () => void }) {
 
 const EDITOR_KEYS: [string, string][] = [["Rechercher", "Ctrl+F"], ["Remplacer", "Ctrl+H"], ["Aller à la ligne", "Ctrl+G"], ["Sélectionner l’occurrence suivante", "Ctrl+D"], ["Annuler", "Ctrl+Z"], ["Rétablir", "Ctrl+Y"], ["Tout sélectionner", "Ctrl+A"], ["Commenter la ligne", "Ctrl+/"], ["Commentaire de bloc", "Maj+Alt+A"], ["Déplacer la ligne", "Alt+↑ / Alt+↓"], ["Dupliquer la ligne", "Maj+Alt+↑ / ↓"], ["Supprimer la ligne", "Ctrl+Maj+K"], ["Indenter / désindenter", "Ctrl+] / Ctrl+["], ["Replier / déplier", "Ctrl+Maj+[ / ]"], ["Curseur supplémentaire", "Alt+clic"]];
 
-function Gallery({ base }: { base: "dark" | "light" }) {
-  const s = useSettings(); const cur = base === "dark" ? s.darkTheme : s.lightTheme;
-  const pick = (id: string) => update(base === "dark" ? { darkTheme: id, ...(s.mode === "light" ? { mode: "dark" as Mode } : {}) } : { lightTheme: id, ...(s.mode === "dark" ? { mode: "light" as Mode } : {}) });
-  return <div className="gallery" role="radiogroup">{THEMES.filter((t) => t.base === base).map((t) => (
-    <button key={t.id} role="radio" aria-checked={cur === t.id} className="swatch" onClick={() => pick(t.id)}>
-      <span style={{ background: t.vars.bg, borderColor: t.vars.bd }}><i style={{ background: t.vars.ac }} /><b style={{ background: t.vars.bg3 }} /></span>{t.name}</button>))}</div>;
-}
 
 function StatusBar({ themeName }: { themeName: string }) {
   const c = useSyncExternalStore(subscribeCursor, getCursor);
@@ -213,4 +231,13 @@ function NewFile({ onClose }: { onClose: () => void }) {
     <input ref={ref} value={n} placeholder="Nom du fichier (ex. index.html)" onChange={(e) => setN(e.target.value)}
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); else if (e.key === "Enter" && n.trim()) { onClose(); createFile(n.trim()); } }} />
     <p className="empty hint">Créé à la racine du dossier ouvert. Entrée pour valider, Échap pour annuler.</p></div></div>;
+}
+
+function PresenceCard() {
+  const s = useSettings();
+  const d = useSyncExternalStore(subscribeDocs, getDocs); const c = useSyncExternalStore(subscribeCursor, getCursor);
+  const file = d.active ? basename(d.active) : null;
+  const p = buildPresence(s, file, c?.lang ?? null, d.root ? basename(d.root) : null);
+  return <div className="presence" aria-label="Aperçu de la présence Discord"><FileIcon name={file ?? "x"} />
+    <div><strong>RustIDE</strong><div>{p.details}</div>{p.state && <div className="sd">{p.state}</div>}<div className="sd">{p.showElapsed ? "Temps écoulé affiché" : "Temps masqué"}{p.smallImage ? ` · icône : ${p.smallImage}` : ""}</div></div></div>;
 }

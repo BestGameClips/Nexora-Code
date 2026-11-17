@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Icon } from "./lib/icons";
+import { FileIcon } from "./lib/fileicons";
 import { getDocs, subscribeDocs, openFile, openFolder, basename } from "./lib/docs";
 
 interface Entry { name: string; path: string; is_dir: boolean; }
@@ -21,7 +22,7 @@ function Node({ e, depth }: { e: Entry; depth: number }) {
   return (<>
     <button className="tnode" style={pad} onClick={toggle} role="treeitem" aria-expanded={e.is_dir ? open : undefined}>
       <span className={"chev" + (open ? " open" : "")}>{e.is_dir && <Icon n="chev" size={12} />}</span>
-      <Icon n={e.is_dir ? "files" : "file"} size={14} /><span className="tname">{e.name}</span>
+      <FileIcon name={e.name} dir={e.is_dir} /><span className="tname">{e.name}</span>
     </button>
     {open && err && <div className="terr" style={pad}>{err}</div>}
     {open && kids && (kids.length === 0 ? <div className="tempty" style={{ paddingLeft: 28 + depth * 14 }}>Dossier vide</div> : kids.map((k) => <Node key={k.path} e={k} depth={depth + 1} />))}

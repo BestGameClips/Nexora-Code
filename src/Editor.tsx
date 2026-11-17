@@ -2,9 +2,12 @@ import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { Icon } from "./lib/icons";
+import { FileIcon } from "./lib/fileicons";
+import { extOn } from "./lib/extensions";
+import { MdPreview } from "./Markdown";
 import { runByKeys } from "./lib/commands";
 import { getDocs, subscribeDocs, docModel, setActive, close, dismissError, setCursor } from "./lib/docs";
-import { getSettings, subscribe } from "./lib/settings";
+import { getSettings, subscribe, update } from "./lib/settings";
 import type { ThemeDef } from "./lib/themes";
 
 (self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = { getWorker: () => new EditorWorker() };
@@ -32,14 +35,16 @@ export function Workbench({ welcome, theme }: { welcome: ReactNode; theme: Theme
   }, [theme]);
   useEffect(() => { ed.current?.updateOptions({ fontSize: s.fontSize, lineNumbers: s.lineNumbers ? "on" : "off", minimap: { enabled: s.minimap }, wordWrap: s.wordWrap ? "on" : "off" }); }, [s.fontSize, s.lineNumbers, s.minimap, s.wordWrap]);
   const has = st.tabs.length > 0;
+  const isMd = !!st.active && /\.(md|markdown)$/i.test(st.active) && extOn("markdown");
+  const prev = isMd && s.mdPreview && st.active ? docModel(st.active) : undefined;
   return (<>
     {st.error && <div className="banner" role="alert"><span>{st.error}</span><button onClick={dismissError}>Fermer</button></div>}
     {has && <div className="tabs" role="tablist">{st.tabs.map((t) => (
       <div key={t.path} role="tab" aria-selected={t.path === st.active} className="tab" title={t.path} onClick={() => setActive(t.path)} onAuxClick={() => close(t.path)}>
-        <Icon n={t.path.startsWith("sftp:") ? "server" : "file"} size={14} /><span>{t.name}</span>{t.dirty && <i className="dot" role="img" aria-label="Modifications non enregistrées" />}
+        <FileIcon name={t.name} /><span>{t.name}</span>{t.dirty && <i className="dot" role="img" aria-label="Modifications non enregistrées" />}
         <button aria-label={"Fermer " + t.name} onClick={(e) => { e.stopPropagation(); close(t.path); }}><Icon n="close" size={12} /></button>
-      </div>))}</div>}
-    <div className="host" ref={host} style={{ display: has ? "block" : "none" }} />
+      </div>))}{isMd && <button className="tabact" aria-pressed={s.mdPreview} onClick={() => update({ mdPreview: !s.mdPreview })}>Aperçu</button>}</div>}
+    <div className="split" style={{ display: has ? "flex" : "none" }}><div className="host" ref={host} />{prev && <MdPreview key={st.active} model={prev} />}</div>
     {!has && <div className="scroll">{welcome}</div>}
   </>);
 }

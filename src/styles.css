@@ -81,3 +81,17 @@ kbd{background:var(--bg3);border:1px solid var(--bd);border-radius:calc(var(--r)
 .prof{display:flex;flex-direction:column;gap:6px;padding:10px;margin-bottom:8px;background:var(--bg);border:1px solid var(--bd);border-radius:var(--rl)}
 .fp{word-break:break-all;background:var(--bg3);padding:4px 6px;border-radius:calc(var(--r)*.6);font-size:.85em}
 .banner.col{flex-direction:column;align-items:stretch}
+.ficon{display:inline-grid;place-items:center;width:22px;flex:none}
+.fbadge{display:inline-grid;place-items:center;min-width:20px;height:14px;padding:0 2px;border:1px solid;border-radius:calc(var(--r)*.4);font:700 8px/1 var(--font)}
+.packprev{display:inline-flex;margin-right:6px;vertical-align:middle}
+.tabact{margin:4px 6px 4px auto;padding:1px 10px;font-size:.85em;flex:none}.tabact[aria-pressed=true]{background:var(--ac);color:var(--acf)}
+.split{flex:1;min-height:0}.split>.host{flex:1;min-width:0;height:100%}
+.md{flex:1;min-width:0;overflow:auto;border-left:1px solid var(--bd);padding:16px 26px;line-height:1.65}
+.md h1,.md h2{border-bottom:1px solid var(--bd);padding-bottom:.25em}.md a{color:var(--ac)}.md img{max-width:100%}
+.md code{background:var(--bg3);padding:1px 5px;border-radius:calc(var(--r)*.5)}.md pre{background:var(--bg2);padding:12px;overflow:auto;border-radius:var(--r)}.md pre code{background:none;padding:0}
+.md blockquote{border-left:3px solid var(--ac);margin:0;padding-left:12px;color:var(--fg2)}.md table{border-collapse:collapse}.md td,.md th{border:1px solid var(--bd);padding:4px 8px}
+.tag{font-size:.75em;padding:1px 8px;border-radius:var(--rp);background:var(--bg3);color:var(--fg2)}.tag.on{background:var(--sel);color:var(--ac)}
+.sidebar input[type=checkbox],.page input[type=checkbox]{width:auto}
+.srow input[type=text]{background:var(--bg);border:1px solid var(--bd);border-radius:var(--r);padding:4px 8px;width:220px}
+.pad{padding:10px 16px;margin:0}.presence{display:flex;gap:12px;align-items:center;width:100%;padding:10px;background:var(--bg);border:1px solid var(--bd);border-radius:var(--rl)}
+.banner.first{margin:10px 0;border:1px solid var(--ac);border-radius:var(--rl);background:var(--sel)}

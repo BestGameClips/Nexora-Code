@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "./lib/icons";
+import { FileIcon } from "./lib/fileicons";
 import { inTauri } from "./lib/settings";
 import { openRemote } from "./lib/docs";
 import { getSftp, subscribeSftp, loadProfiles, saveProfile, deleteProfile, connect, disconnect, cancelTrust, dismissSftpError, forgetHost, type Profile } from "./lib/sftp";
@@ -21,7 +22,7 @@ function RNode({ e, depth }: { e: RE; depth: number }) {
   const [open, setOpen] = useState(false);
   return (<>
     <button className="tnode" style={{ paddingLeft: 6 + depth * 14 }} onClick={() => (e.is_dir ? setOpen(!open) : void openRemote(e.path))} role="treeitem" aria-expanded={e.is_dir ? open : undefined}>
-      <span className={"chev" + (open ? " open" : "")}>{e.is_dir && <Icon n="chev" size={12} />}</span><Icon n={e.is_dir ? "files" : "file"} size={14} /><span className="tname">{e.name}</span></button>
+      <span className={"chev" + (open ? " open" : "")}>{e.is_dir && <Icon n="chev" size={12} />}</span><FileIcon name={e.name} dir={e.is_dir} /><span className="tname">{e.name}</span></button>
     {open && e.is_dir && <RChildren path={e.path} depth={depth + 1} />}
   </>);
 }
