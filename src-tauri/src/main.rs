@@ -80,6 +80,16 @@ fn save_settings(app: tauri::AppHandle, json: String) -> Result<(), String> {
     fs::rename(&tmp, &file).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn create_file(state: State<'_, Root>, dir: String, name: String) -> Result<String, String> {
+    let d = check(&state, &dir)?;
+    if name.is_empty() || name == "." || name == ".." || name.contains(|c: char| matches!(c, '/' | '\\' | ':')) { return Err("Nom de fichier invalide".into()); }
+    let p = d.join(&name);
+    fs::OpenOptions::new().write(true).create_new(true).open(&p)
+        .map_err(|e| if e.kind() == ErrorKind::AlreadyExists { "Ce fichier existe déjà".to_string() } else { e.to_string() })?;
+    Ok(clean(&p))
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -92,7 +102,7 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![load_settings, save_settings, set_root, list_dir, read_file, write_file])
+        .invoke_handler(tauri::generate_handler![load_settings, save_settings, set_root, list_dir, read_file, write_file, create_file])
         .run(tauri::generate_context!())
         .expect("erreur au lancement de l'application");
 }

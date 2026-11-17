@@ -4,12 +4,12 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { inTauri } from "./settings";
 
 export interface Tab { path: string; name: string; dirty: boolean; }
-export interface DocsState { tabs: Tab[]; active: string | null; root: string | null; error: string | null; }
+export interface DocsState { tabs: Tab[]; active: string | null; root: string | null; error: string | null; treeVersion: number; }
 interface Doc { model: monaco.editor.ITextModel; saved: number; }
 const docs = new Map<string, Doc>();
 const pending = new Set<string>();
 const subs = new Set<() => void>();
-let state: DocsState = { tabs: [], active: null, root: null, error: null };
+let state: DocsState = { tabs: [], active: null, root: null, error: null, treeVersion: 0 };
 const set = (p: Partial<DocsState>) => { state = { ...state, ...p }; subs.forEach((f) => f()); };
 export const getDocs = () => state;
 export const subscribeDocs = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
@@ -67,3 +67,25 @@ export async function openFolder() {
     set({ tabs: [], active: null, root: dir, error: null });
   } catch (e) { set({ error: `Ouverture du dossier impossible : ${e}` }); }
 }
+
+export async function saveAll() {
+  for (const t of state.tabs) {
+    const d = t.dirty ? docs.get(t.path) : undefined; if (!d) continue;
+    try { await invoke("write_file", { path: t.path, content: d.model.getValue() }); d.saved = d.model.getAlternativeVersionId(); setDirty(t.path, false); }
+    catch (e) { set({ error: `Enregistrement de ${t.name} impossible : ${e}` }); }
+  }
+}
+export function cycleTab(dir: 1 | -1) {
+  const n = state.tabs.length; const i = state.tabs.findIndex((t) => t.path === state.active);
+  if (n > 1 && i >= 0) set({ active: state.tabs[(i + dir + n) % n].path });
+}
+export async function createFile(name: string) {
+  if (!state.root) return set({ error: "Ouvrez d’abord un dossier (Ctrl+O)." });
+  try { const path = await invoke<string>("create_file", { dir: state.root, name }); set({ treeVersion: state.treeVersion + 1 }); await openFile(path); }
+  catch (e) { set({ error: `Création impossible : ${e}` }); }
+}
+export interface Cursor { ln: number; col: number; lang: string; eol: string; tab: number; }
+let cursor: Cursor | null = null; const csubs = new Set<() => void>();
+export const getCursor = () => cursor;
+export const subscribeCursor = (f: () => void) => { csubs.add(f); return () => { csubs.delete(f); }; };
+export function setCursor(c: Cursor | null) { if (JSON.stringify(c) === JSON.stringify(cursor)) return; cursor = c; csubs.forEach((f) => f()); }

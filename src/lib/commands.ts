@@ -1,4 +1,4 @@
-export interface Command { id: string; title: string; category: string; keys?: string; run: () => void; }
+export interface Command { id: string; title: string; category: string; keys?: string; alias?: string[]; run: () => void; }
 const registry = new Map<string, Command>();
 export const register = (cmds: Command[]) => { registry.clear(); cmds.forEach((c) => registry.set(c.id, c)); };
 export const all = () => [...registry.values()];
@@ -8,7 +8,7 @@ export function keyOf(e: KeyboardEvent): string {
   return [e.ctrlKey && "Ctrl", e.altKey && "Alt", e.shiftKey && "Shift", k].filter(Boolean).join("+");
 }
 export function runByKeys(combo: string): boolean {
-  const c = all().find((x) => x.keys === combo);
+  const c = all().find((x) => x.keys === combo || x.alias?.includes(combo));
   if (c) { c.run(); return true; }
   return false;
 }

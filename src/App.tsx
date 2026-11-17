@@ -5,7 +5,8 @@ import { register, all, keyOf, runByKeys, fuzzy } from "./lib/commands";
 import { Icon, type IconName } from "./lib/icons";
 import { Explorer } from "./Explorer";
 import { Workbench } from "./Editor";
-import { openFolder, save, close as closeTab, getDocs } from "./lib/docs";
+import { openFolder, save, saveAll, cycleTab, createFile, close as closeTab, getDocs, getCursor, subscribeCursor } from "./lib/docs";
+import { THEMES, themeById, applyTheme } from "./lib/themes";
 
 type View = "explorer" | "settings";
 const useSettings = () => useSyncExternalStore(subscribe, getSettings);
@@ -15,6 +16,7 @@ export function App() {
   const s = useSettings();
   const [view, setView] = useState<View>("explorer");
   const [palette, setPalette] = useState(false);
+  const [newFile, setNewFile] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [sysDark, setSysDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
 
@@ -25,20 +27,33 @@ export function App() {
     return () => mq.removeEventListener("change", f);
   }, []);
   const theme = s.mode === "system" ? (sysDark ? "dark" : "light") : s.mode;
+  const themeDef = themeById(theme === "dark" ? s.darkTheme : s.lightTheme);
   useEffect(() => {
     const r = document.documentElement;
     r.dataset.theme = theme;
+    applyTheme(themeDef);
     r.classList.toggle("mica", s.mica);
     r.style.setProperty("--fs", s.fontSize + "px");
     r.style.setProperty("--r", (s.rounded ? s.radius : 0) + "px");
     r.style.setProperty("--rl", (s.rounded ? s.radius * 1.5 : 0) + "px");
     r.style.setProperty("--rp", s.rounded ? "999px" : "0px");
-  }, [theme, s.mica, s.fontSize, s.rounded, s.radius]);
+  }, [theme, themeDef, s.mica, s.fontSize, s.rounded, s.radius]);
 
   useEffect(() => {
     register([
-      { id: "ide.palette.open", title: "Ouvrir la palette de commandes", category: "Général", keys: "Ctrl+Shift+P", run: () => setPalette(true) },
+      { id: "ide.palette.open", title: "Ouvrir la palette de commandes", category: "Général", keys: "Ctrl+Shift+P", alias: ["F1"], run: () => setPalette(true) },
       { id: "ide.settings.open", title: "Ouvrir les paramètres", category: "Général", keys: "Ctrl+,", run: () => setView("settings") },
+      { id: "ide.file.new", title: "Nouveau fichier…", category: "Fichier", keys: "Ctrl+N", run: () => setNewFile(true) },
+      { id: "ide.file.saveAll", title: "Tout enregistrer", category: "Fichier", keys: "Ctrl+Shift+S", run: () => { saveAll(); } },
+      { id: "ide.tab.next", title: "Onglet suivant", category: "Fichier", keys: "Ctrl+Tab", alias: ["Ctrl+PageDown"], run: () => cycleTab(1) },
+      { id: "ide.tab.prev", title: "Onglet précédent", category: "Fichier", keys: "Ctrl+Shift+Tab", alias: ["Ctrl+PageUp"], run: () => cycleTab(-1) },
+      { id: "ide.view.fullscreen", title: "Plein écran", category: "Affichage", keys: "F11", run: () => { if (inTauri) { const w = getCurrentWindow(); w.isFullscreen().then((f) => w.setFullscreen(!f)); } } },
+      { id: "ide.zoom.in", title: "Agrandir le texte", category: "Affichage", keys: "Ctrl+=", alias: ["Ctrl++", "Ctrl+Shift++"], run: () => update({ fontSize: getSettings().fontSize + 1 }) },
+      { id: "ide.zoom.out", title: "Réduire le texte", category: "Affichage", keys: "Ctrl+-", run: () => update({ fontSize: getSettings().fontSize - 1 }) },
+      { id: "ide.zoom.reset", title: "Taille du texte par défaut", category: "Affichage", keys: "Ctrl+0", alias: ["Ctrl+Shift+0"], run: () => update({ fontSize: 14 }) },
+      { id: "ide.editor.wrap", title: "Retour à la ligne automatique", category: "Éditeur", keys: "Alt+Z", run: () => update({ wordWrap: !getSettings().wordWrap }) },
+      { id: "ide.editor.minimap", title: "Afficher/masquer la minimap", category: "Éditeur", run: () => update({ minimap: !getSettings().minimap }) },
+      { id: "ide.editor.lineNumbers", title: "Afficher/masquer les numéros de ligne", category: "Éditeur", run: () => update({ lineNumbers: !getSettings().lineNumbers }) },
       { id: "ide.folder.open", title: "Ouvrir un dossier…", category: "Fichier", keys: "Ctrl+O", run: () => { openFolder(); } },
       { id: "ide.file.save", title: "Enregistrer", category: "Fichier", keys: "Ctrl+S", run: () => { save(); } },
       { id: "ide.tab.close", title: "Fermer l’onglet", category: "Fichier", keys: "Ctrl+W", run: () => { const t = getDocs().active; if (t) closeTab(t); } },
@@ -95,12 +110,13 @@ export function App() {
         <main className="main">
           <div className="editor">
             <div className="scroll" style={{ display: view === "settings" ? "block" : "none" }}><Settings /></div>
-            <div className="workspace" style={{ display: view === "settings" ? "none" : "flex" }}><Workbench welcome={<Welcome />} theme={theme} fontSize={s.fontSize} /></div></div>
+            <div className="workspace" style={{ display: view === "settings" ? "none" : "flex" }}><Workbench welcome={<Welcome />} theme={themeDef} /></div></div>
           {s.panelVisible && <><div className="resizer h" onPointerDown={drag("y")} role="separator" aria-orientation="horizontal" />
             <section className="panel" style={{ height: s.panelHeight }}><h2>Journal</h2><p className="empty">Aucun transfert pour le moment. Le journal SFTP s’affichera ici.</p></section></>}
         </main>
       </div>
-      <footer className="status"><span>v0.1.0</span><span>Thème {theme === "dark" ? "sombre" : "clair"}</span></footer>
+      <StatusBar themeName={themeDef.name} />
+      {newFile && <NewFile onClose={() => setNewFile(false)} />}
       {palette && <Palette onClose={() => setPalette(false)} />}
     </div>
   );
@@ -124,6 +140,7 @@ function Settings() {
   const modes: [Mode, string][] = [["system", "Système"], ["light", "Clair"], ["dark", "Sombre"]];
   return (
     <div className="page"><h1>Paramètres</h1>
+      <h3>Thèmes sombres</h3><Gallery base="dark" /><h3>Thèmes clairs</h3><Gallery base="light" />
       <h3>Apparence</h3>
       <div className="card">
         <Row title="Thème" desc="Le mode automatique suit Windows.">
@@ -133,11 +150,19 @@ function Settings() {
         <Row title={`Taille du texte (${s.fontSize}px)`}><input type="range" min={10} max={24} value={s.fontSize} onChange={(e) => update({ fontSize: +e.target.value })} /></Row>
         <Row title="Effet Mica" desc="Windows 11 uniquement. Laissez désactivé sous Windows 10."><Switch on={s.mica} set={(v) => update({ mica: v })} label="Effet Mica" /></Row>
       </div>
+      <h3>Éditeur</h3>
+      <div className="card">
+        <Row title="Numéros de ligne" desc="Affichés dans la marge de gauche."><Switch on={s.lineNumbers} set={(v) => update({ lineNumbers: v })} label="Numéros de ligne" /></Row>
+        <Row title="Minimap"><Switch on={s.minimap} set={(v) => update({ minimap: v })} label="Minimap" /></Row>
+        <Row title="Retour à la ligne automatique" desc="Raccourci : Alt+Z"><Switch on={s.wordWrap} set={(v) => update({ wordWrap: v })} label="Retour à la ligne" /></Row>
+      </div>
       <h3>Disposition</h3>
       <div className="card"><Row title="Restaurer la disposition" desc="Remet les tailles et l’affichage des panneaux par défaut.">
         <button className="btn" onClick={() => update({ sidebarWidth: 260, panelHeight: 180, sidebarVisible: true, panelVisible: true })}>Restaurer</button></Row></div>
       <h3>Raccourcis clavier</h3>
-      <div className="card">{all().filter((c) => c.keys).map((c) => <Row key={c.id} title={c.title}><kbd>{c.keys}</kbd></Row>)}</div>
+      <div className="card">{all().filter((c) => c.keys).map((c) => <Row key={c.id} title={c.title}><span className="keys"><kbd>{c.keys}</kbd>{c.alias?.map((a) => <kbd key={a}>{a}</kbd>)}</span></Row>)}</div>
+      <h3>Raccourcis de l’éditeur</h3>
+      <div className="card">{EDITOR_KEYS.map(([t, k]) => <Row key={t} title={t}><kbd>{k}</kbd></Row>)}</div>
     </div>
   );
 }
@@ -157,4 +182,29 @@ function Palette({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
+}
+
+const EDITOR_KEYS: [string, string][] = [["Rechercher", "Ctrl+F"], ["Remplacer", "Ctrl+H"], ["Aller à la ligne", "Ctrl+G"], ["Sélectionner l’occurrence suivante", "Ctrl+D"], ["Annuler", "Ctrl+Z"], ["Rétablir", "Ctrl+Y"], ["Tout sélectionner", "Ctrl+A"], ["Commenter la ligne", "Ctrl+/"], ["Commentaire de bloc", "Maj+Alt+A"], ["Déplacer la ligne", "Alt+↑ / Alt+↓"], ["Dupliquer la ligne", "Maj+Alt+↑ / ↓"], ["Supprimer la ligne", "Ctrl+Maj+K"], ["Indenter / désindenter", "Ctrl+] / Ctrl+["], ["Replier / déplier", "Ctrl+Maj+[ / ]"], ["Curseur supplémentaire", "Alt+clic"]];
+
+function Gallery({ base }: { base: "dark" | "light" }) {
+  const s = useSettings(); const cur = base === "dark" ? s.darkTheme : s.lightTheme;
+  const pick = (id: string) => update(base === "dark" ? { darkTheme: id, ...(s.mode === "light" ? { mode: "dark" as Mode } : {}) } : { lightTheme: id, ...(s.mode === "dark" ? { mode: "light" as Mode } : {}) });
+  return <div className="gallery" role="radiogroup">{THEMES.filter((t) => t.base === base).map((t) => (
+    <button key={t.id} role="radio" aria-checked={cur === t.id} className="swatch" onClick={() => pick(t.id)}>
+      <span style={{ background: t.vars.bg, borderColor: t.vars.bd }}><i style={{ background: t.vars.ac }} /><b style={{ background: t.vars.bg3 }} /></span>{t.name}</button>))}</div>;
+}
+
+function StatusBar({ themeName }: { themeName: string }) {
+  const c = useSyncExternalStore(subscribeCursor, getCursor);
+  return <footer className="status"><span>v0.1.0</span><span className="grow" />
+    {c && <><span>Ln {c.ln}, Col {c.col}</span><span>{c.lang}</span><span>{c.eol}</span><span>Espaces : {c.tab}</span></>}<span>{themeName}</span></footer>;
+}
+
+function NewFile({ onClose }: { onClose: () => void }) {
+  const [n, setN] = useState(""); const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => ref.current?.focus(), []);
+  return <div className="overlay" onMouseDown={onClose}><div className="palette" role="dialog" aria-label="Nouveau fichier" onMouseDown={(e) => e.stopPropagation()}>
+    <input ref={ref} value={n} placeholder="Nom du fichier (ex. index.html)" onChange={(e) => setN(e.target.value)}
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); else if (e.key === "Enter" && n.trim()) { onClose(); createFile(n.trim()); } }} />
+    <p className="empty hint">Créé à la racine du dossier ouvert. Entrée pour valider, Échap pour annuler.</p></div></div>;
 }

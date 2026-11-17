@@ -29,13 +29,13 @@ function Node({ e, depth }: { e: Entry; depth: number }) {
 }
 
 export function Explorer() {
-  const { root } = useSyncExternalStore(subscribeDocs, getDocs);
+  const { root, treeVersion } = useSyncExternalStore(subscribeDocs, getDocs);
   const [items, setItems] = useState<Entry[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     setItems(null); setErr(null);
     if (root) invoke<Entry[]>("list_dir", { path: root }).then((r) => setItems(sortE(r))).catch((e) => setErr(String(e)));
-  }, [root]);
+  }, [root, treeVersion]);
   if (!root) return (
     <div className="emptybox"><strong>Aucun dossier ouvert</strong><span>Ouvrez un dossier pour parcourir et modifier vos fichiers.</span>
       <button className="btn" onClick={openFolder}>Ouvrir un dossier</button></div>);

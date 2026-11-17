@@ -1,7 +1,8 @@
+import { THEMES } from "./themes";
 import { invoke } from "@tauri-apps/api/core";
 export type Mode = "system" | "light" | "dark";
-export interface Settings { version: 1; mode: Mode; fontSize: number; mica: boolean; rounded: boolean; radius: number; sidebarWidth: number; panelHeight: number; sidebarVisible: boolean; panelVisible: boolean; }
-export const defaults: Settings = { version: 1, mode: "system", fontSize: 14, mica: false, rounded: true, radius: 8, sidebarWidth: 260, panelHeight: 180, sidebarVisible: true, panelVisible: true };
+export interface Settings { version: 1; mode: Mode; fontSize: number; mica: boolean; darkTheme: string; lightTheme: string; lineNumbers: boolean; minimap: boolean; wordWrap: boolean; rounded: boolean; radius: number; sidebarWidth: number; panelHeight: number; sidebarVisible: boolean; panelVisible: boolean; }
+export const defaults: Settings = { version: 1, mode: "system", fontSize: 14, mica: false, darkTheme: "obsidian", lightTheme: "arctic-light", lineNumbers: true, minimap: true, wordWrap: false, rounded: true, radius: 8, sidebarWidth: 260, panelHeight: 180, sidebarVisible: true, panelVisible: true };
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 let state: Settings = defaults;
 const subs = new Set<() => void>();
@@ -13,6 +14,8 @@ function sanitize(p: Partial<Settings>): Settings {
   const m = { ...defaults, ...p, version: 1 as const };
   if (!["system", "light", "dark"].includes(m.mode)) m.mode = "system";
   m.fontSize = clamp(Number(m.fontSize) || 14, 10, 24);
+  if (!THEMES.some((t) => t.id === m.darkTheme && t.base === "dark")) m.darkTheme = "obsidian";
+  if (!THEMES.some((t) => t.id === m.lightTheme && t.base === "light")) m.lightTheme = "arctic-light";
   m.radius = clamp(Number(m.radius) || 0, 0, 20);
   m.sidebarWidth = clamp(Number(m.sidebarWidth) || 260, 160, 600);
   m.panelHeight = clamp(Number(m.panelHeight) || 180, 80, 600);
