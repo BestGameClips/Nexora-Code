@@ -1,4 +1,4 @@
-# RustIDE Ultimate
+# Nexura Code
 
 **Un environnement de développement desktop moderne, personnalisable et en cours de construction.**
 
