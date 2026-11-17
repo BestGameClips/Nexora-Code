@@ -1,0 +1,4 @@
+{"$schema":"https://schema.tauri.app/config/2","productName":"RustIDE Ultimate","version":"0.1.0","identifier":"dev.rustide.app",
+"build":{"beforeDevCommand":"npm run dev","devUrl":"http://localhost:1420","beforeBuildCommand":"npm run build","frontendDist":"../dist"},
+"app":{"windows":[{"label":"main","title":"RustIDE Ultimate","width":1280,"height":800,"minWidth":800,"minHeight":500,"decorations":false,"transparent":true}],"security":{"csp":null}},
+"bundle":{"active":true,"targets":["nsis"],"icon":["icons/icon.ico"]}}
