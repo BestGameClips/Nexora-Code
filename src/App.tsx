@@ -7,7 +7,7 @@ import { Explorer } from "./Explorer";
 import { Sftp } from "./Sftp";
 import { getSftp, subscribeSftp, disconnect } from "./lib/sftp";
 import { Workbench } from "./Editor";
-import { openFolder, save, saveAll, cycleTab, createFile, close as closeTab, getDocs, getCursor, subscribeCursor, subscribeDocs, basename } from "./lib/docs";
+import { openFolder, save, saveAll, cycleTab, createFile, close as closeTab, getDocs, shiftTab, toggleEol, getCursor, subscribeCursor, subscribeDocs, basename } from "./lib/docs";
 import { themeById, applyTheme } from "./lib/themes";
 import { Gallery } from "./Gallery";
 import { Welcome } from "./Welcome";
@@ -15,6 +15,9 @@ import { Extensions } from "./Extensions";
 import { extOn } from "./lib/extensions";
 import { buildPresence } from "./lib/presence";
 import { FileIcon } from "./lib/fileicons";
+import { MenuHost } from "./ContextMenu";
+import { AskHost } from "./Ask";
+import { newFileHere } from "./lib/sftpops";
 import { NAME, SHORT } from "./lib/brand";
 import logo from "./assets/logo@2x.png";
 import { getDiscord, subscribeDiscord } from "./lib/discord";
@@ -26,6 +29,7 @@ const FUTURE: [string, IconName][] = [["Recherche", "search"], ["Git", "git"], [
 export function App() {
   const s = useSettings();
   const [view, setView] = useState<View>("explorer");
+  const viewRef = useRef(view); viewRef.current = view;
   const [palette, setPalette] = useState(false);
   const [newFile, setNewFile] = useState(false);
   const [maximized, setMaximized] = useState(false);
@@ -60,7 +64,9 @@ export function App() {
       { id: "ide.discord.toggle", title: "Discord : activer/désactiver la présence", category: "Discord", run: () => update({ discord: { ...getSettings().discord, enabled: !getSettings().discord.enabled } }) },
       { id: "ide.sftp.focus", title: "Afficher SFTP", category: "SFTP", keys: "Ctrl+Shift+Y", run: () => { setView("sftp"); update({ sidebarVisible: true }); } },
       { id: "ide.sftp.disconnect", title: "Se déconnecter du serveur SFTP", category: "SFTP", run: () => { disconnect(); } },
-      { id: "ide.file.new", title: "Nouveau fichier…", category: "Fichier", keys: "Ctrl+N", run: () => setNewFile(true) },
+      { id: "ide.file.new", title: "Nouveau fichier…", category: "Fichier", keys: "Ctrl+N", run: () => { if (viewRef.current === "sftp" && getSftp().connected) newFileHere(); else setNewFile(true); } },
+      { id: "ide.tab.moveLeft", title: "Déplacer l’onglet à gauche", category: "Fichier", keys: "Ctrl+Shift+PageUp", run: () => shiftTab(-1) },
+      { id: "ide.tab.moveRight", title: "Déplacer l’onglet à droite", category: "Fichier", keys: "Ctrl+Shift+PageDown", run: () => shiftTab(1) },
       { id: "ide.file.saveAll", title: "Tout enregistrer", category: "Fichier", keys: "Ctrl+Shift+S", run: () => { saveAll(); } },
       { id: "ide.tab.next", title: "Onglet suivant", category: "Fichier", keys: "Ctrl+Tab", alias: ["Ctrl+PageDown"], run: () => cycleTab(1) },
       { id: "ide.tab.prev", title: "Onglet précédent", category: "Fichier", keys: "Ctrl+Shift+Tab", alias: ["Ctrl+PageUp"], run: () => cycleTab(-1) },
@@ -136,6 +142,8 @@ export function App() {
         </main>
       </div>
       <StatusBar themeName={themeDef.name} />
+      <MenuHost />
+      <AskHost />
       {newFile && <NewFile onClose={() => setNewFile(false)} />}
       {palette && <Palette onClose={() => setPalette(false)} />}
     </div>
@@ -157,7 +165,7 @@ function Settings() {
     <div className="page"><h1>Paramètres</h1>
       <h3>Général</h3>
       <div className="card">
-        <Row title="Langue" desc="Langue de l’écran d’accueil ; le reste de l’interface sera traduit progressivement."><div className="seg" role="radiogroup" aria-label="Langue">{(["fr", "en"] as const).map((l) => <button key={l} role="radio" aria-checked={s.language === l} onClick={() => update({ language: l })}>{l === "fr" ? "Français" : "English"}</button>)}</div></Row>
+        <Row title="Langue" desc="Langue de l’interface (français ou anglais)."><div className="seg" role="radiogroup" aria-label="Langue">{(["fr", "en"] as const).map((l) => <button key={l} role="radio" aria-checked={s.language === l} onClick={() => update({ language: l })}>{l === "fr" ? "Français" : "English"}</button>)}</div></Row>
         <Row title="Afficher l’accueil" desc="Quand aucun fichier n’est ouvert."><Switch on={s.showWelcome} set={(v) => update({ showWelcome: v })} label="Afficher l’accueil" /></Row>
       </div>
       <h3>Thèmes sombres</h3><Gallery base="dark" /><h3>Thèmes clairs</h3><Gallery base="light" />
@@ -169,6 +177,11 @@ function Settings() {
         <Row title={`Rayon des coins (${s.radius}px)`} desc="Désactivé quand les coins arrondis sont éteints."><input type="range" min={0} max={20} value={s.radius} disabled={!s.rounded} onChange={(e) => update({ radius: +e.target.value })} /></Row>
         <Row title={`Taille du texte (${s.fontSize}px)`}><input type="range" min={10} max={24} value={s.fontSize} onChange={(e) => update({ fontSize: +e.target.value })} /></Row>
         <Row title="Effet Mica" desc="Windows 11 uniquement. Laissez désactivé sous Windows 10."><Switch on={s.mica} set={(v) => update({ mica: v })} label="Effet Mica" /></Row>
+      </div>
+      <h3>Fichiers</h3>
+      <div className="card">
+        <Row title="Restaurer la session au démarrage" desc="Rouvre le dernier dossier et les onglets enregistrés."><Switch on={s.restoreSession} set={(v) => update({ restoreSession: v })} label="Restaurer la session" /></Row>
+        <Row title="Enregistrement automatique" desc="Enregistre les fichiers locaux 1,5 s après la dernière frappe. Jamais appliqué aux fichiers distants."><Switch on={s.autoSave} set={(v) => update({ autoSave: v })} label="Enregistrement automatique" /></Row>
       </div>
       <h3>Éditeur</h3>
       <div className="card">
@@ -220,7 +233,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   );
 }
 
-const EDITOR_KEYS: [string, string][] = [["Rechercher", "Ctrl+F"], ["Remplacer", "Ctrl+H"], ["Aller à la ligne", "Ctrl+G"], ["Sélectionner l’occurrence suivante", "Ctrl+D"], ["Annuler", "Ctrl+Z"], ["Rétablir", "Ctrl+Y"], ["Tout sélectionner", "Ctrl+A"], ["Commenter la ligne", "Ctrl+/"], ["Commentaire de bloc", "Maj+Alt+A"], ["Déplacer la ligne", "Alt+↑ / Alt+↓"], ["Dupliquer la ligne", "Maj+Alt+↑ / ↓"], ["Supprimer la ligne", "Ctrl+Maj+K"], ["Indenter / désindenter", "Ctrl+] / Ctrl+["], ["Replier / déplier", "Ctrl+Maj+[ / ]"], ["Curseur supplémentaire", "Alt+clic"]];
+const EDITOR_KEYS: [string, string][] = [["Rechercher", "Ctrl+F"], ["Remplacer", "Ctrl+H"], ["Aller à la ligne", "Ctrl+G"], ["Sélectionner l’occurrence suivante", "Ctrl+D"], ["Annuler l’édition", "Ctrl+Z"], ["Rétablir", "Ctrl+Y"], ["Tout sélectionner", "Ctrl+A"], ["Commenter la ligne", "Ctrl+/"], ["Commentaire de bloc", "Maj+Alt+A"], ["Déplacer la ligne", "Alt+↑ / Alt+↓"], ["Dupliquer la ligne", "Maj+Alt+↑ / ↓"], ["Supprimer la ligne", "Ctrl+Maj+K"], ["Indenter / désindenter", "Ctrl+] / Ctrl+["], ["Replier / déplier", "Ctrl+Maj+[ / ]"], ["Curseur supplémentaire", "Alt+clic"]];
 
 
 function StatusBar({ themeName }: { themeName: string }) {
@@ -228,7 +241,7 @@ function StatusBar({ themeName }: { themeName: string }) {
   const sf = useSyncExternalStore(subscribeSftp, getSftp);
   const dc = useSyncExternalStore(subscribeDiscord, getDiscord);
   return <footer className="status"><span>{SHORT} v0.1.0</span>{sf.connected && <span>SFTP : {sf.connected.name}</span>}{dc.state === "connected" && <span title="Présence Discord active">Discord ●</span>}<span className="grow" />
-    {c && <><span>Ln {c.ln}, Col {c.col}</span><span>{c.lang}</span><span>{c.eol}</span><span>Espaces : {c.tab}</span></>}<span>{themeName}</span></footer>;
+    {c && <><span>Ln {c.ln}, Col {c.col}</span><span>{c.lang}</span><button className="sbtn" onClick={toggleEol} title="Changer les fins de ligne (LF/CRLF)">{c.eol}</button><span>Espaces : {c.tab}</span></>}<span>{themeName}</span></footer>;
 }
 
 function NewFile({ onClose }: { onClose: () => void }) {

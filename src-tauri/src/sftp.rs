@@ -203,3 +203,33 @@ pub async fn sftp_remove(state: State<'_, SftpState>, path: String, is_dir: bool
     (if is_dir { s.remove_dir(path).await.map(|_| ()) } else { s.remove_file(path).await.map(|_| ()) })
         .map_err(|e| if is_dir { format!("Impossible de supprimer le dossier (est-il vide ?) : {e}") } else { es(e) })
 }
+
+/// Importe les hôtes simples de `~/.ssh/config` (Host, HostName, User, Port, IdentityFile). Les motifs génériques (`*`, `?`) sont ignorés.
+#[tauri::command]
+pub async fn ssh_config_import() -> Result<Vec<Profile>, String> {
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).map_err(|_| "Dossier utilisateur introuvable".to_string())?;
+    let path = PathBuf::from(&home).join(".ssh").join("config");
+    let text = fs::read_to_string(&path).map_err(|e| format!("Fichier {} illisible : {e}", path.display()))?;
+    let mut out: Vec<Profile> = Vec::new();
+    let mut cur: Option<Profile> = None;
+    for line in text.lines() {
+        let l = line.trim();
+        if l.is_empty() || l.starts_with('#') { continue; }
+        let (k, v) = match l.split_once(|c: char| c.is_whitespace() || c == '=') { Some((k, v)) => (k.trim().to_lowercase(), v.trim().trim_matches('"').to_string()), None => continue };
+        if k == "host" {
+            if let Some(p) = cur.take() { out.push(p); }
+            if v.contains('*') || v.contains('?') || v.contains(' ') || v.starts_with('!') { continue; }
+            cur = Some(Profile { id: format!("ssh-{v}"), name: v.clone(), host: v, port: 22, user: String::new(), auth: "password".into(), key_path: None });
+        } else if let Some(p) = cur.as_mut() {
+            match k.as_str() {
+                "hostname" => p.host = v,
+                "user" => p.user = v,
+                "port" => p.port = v.parse().unwrap_or(22),
+                "identityfile" => { p.auth = "key".into(); p.key_path = Some(v.replacen('~', &home, 1)); }
+                _ => {}
+            }
+        }
+    }
+    if let Some(p) = cur { out.push(p); }
+    Ok(out.into_iter().filter(|p| !p.user.is_empty() && !p.host.is_empty()).collect())
+}

@@ -1,15 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import { inTauri } from "./settings";
+import { _ } from "./translate";
 
 export interface Profile { id: string; name: string; host: string; port: number; user: string; auth: "password" | "key"; key_path?: string | null; }
-export interface SftpStore { profiles: Profile[]; connected: { id: string; name: string; home: string } | null; busy: boolean; error: string | null; changedFor: string | null; trust: { id: string; secret?: string; fp: string } | null; tick: number; ask: { title: string; initial: string; run: (name: string) => Promise<void> } | null; lastConn: { id: string; secret?: string } | null; }
-let st: SftpStore = { profiles: [], connected: null, busy: false, error: null, changedFor: null, trust: null, tick: 0, ask: null, lastConn: null };
+export interface SftpStore { profiles: Profile[]; connected: { id: string; name: string; home: string } | null; busy: boolean; error: string | null; changedFor: string | null; trust: { id: string; secret?: string; fp: string } | null; tick: number; ask: { title: string; initial: string; run: (name: string) => Promise<void> } | null; lastConn: { id: string; secret?: string } | null; cwd: string | null; reveal: { path: string; n: number } | null; notice: string | null; }
+let st: SftpStore = { profiles: [], connected: null, busy: false, error: null, changedFor: null, trust: null, tick: 0, ask: null, lastConn: null, cwd: null, reveal: null, notice: null };
 const subs = new Set<() => void>();
 const set = (p: Partial<SftpStore>) => { st = { ...st, ...p }; subs.forEach((f) => f()); };
 export const getSftp = () => st;
 export const subscribeSftp = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
 export const cancelTrust = () => set({ trust: null });
-export const dismissSftpError = () => set({ error: null, changedFor: null });
+export const dismissSftpError = () => set({ error: null, changedFor: null, notice: null });
 
 export async function loadProfiles() {
   if (!inTauri) return;
@@ -38,7 +39,7 @@ export async function connect(id: string, secret?: string, trust?: string) {
     else set({ busy: false, error: m });
   }
 }
-export async function disconnect() { try { await invoke("sftp_disconnect"); } catch { /* déjà fermé */ } set({ connected: null, lastConn: null }); }
+export async function disconnect() { try { await invoke("sftp_disconnect"); } catch { /* déjà fermé */ } set({ connected: null, lastConn: null, cwd: null }); }
 
 export const refreshTree = () => set({ tick: st.tick + 1 });
 export const askName = (title: string, initial: string, run: (name: string) => Promise<void>) => set({ ask: { title, initial, run } });
@@ -59,4 +60,16 @@ export async function withReconnect<T>(fn: () => Promise<T>): Promise<T> {
 /** Exécute une opération distante en affichant l'erreur dans le panneau SFTP. */
 export async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
   try { return await withReconnect(fn); } catch (e) { set({ error: String(e) }); return undefined; }
+}
+
+export const setCwd = (cwd: string) => set({ cwd });
+export const setReveal = (path: string) => set({ reveal: { path, n: Date.now() } });
+export async function importSshConfig() {
+  try {
+    const found = await invoke<Profile[]>("ssh_config_import");
+    const have = new Set(st.profiles.map((p) => p.id)), fresh = found.filter((p) => !have.has(p.id));
+    for (const p of fresh) await invoke("profile_save", { profile: p });
+    await loadProfiles();
+    set({ error: null, notice: fresh.length ? _("{n} profil(s) importé(s) depuis ~/.ssh/config", { n: fresh.length }) : _("Aucun nouveau profil à importer.") });
+  } catch (e) { set({ error: String(e) }); }
 }

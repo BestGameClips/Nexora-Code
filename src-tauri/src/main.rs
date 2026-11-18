@@ -92,6 +92,46 @@ async fn create_file(state: State<'_, Root>, dir: String, name: String) -> Resul
     Ok(clean(&p))
 }
 
+fn valid_name(n: &str) -> Result<(), String> {
+    if n.is_empty() || n == "." || n == ".." || n.contains(|c: char| matches!(c, '/' | '\\' | ':' | '\0')) { Err("Nom invalide".into()) } else { Ok(()) }
+}
+
+#[tauri::command]
+async fn fs_mkdir(state: State<'_, Root>, dir: String, name: String) -> Result<(), String> {
+    valid_name(&name)?;
+    let d = check(&state, &dir)?;
+    fs::create_dir(d.join(&name)).map_err(|e| if e.kind() == ErrorKind::AlreadyExists { "Ce nom existe déjà".to_string() } else { e.to_string() })
+}
+
+#[tauri::command]
+async fn fs_rename(state: State<'_, Root>, path: String, new_name: String) -> Result<String, String> {
+    valid_name(&new_name)?;
+    let p = check(&state, &path)?;
+    let dest = p.parent().ok_or("Chemin invalide")?.join(&new_name);
+    if dest.exists() { return Err("Ce nom existe déjà".into()); }
+    fs::rename(&p, &dest).map_err(|e| e.to_string())?;
+    Ok(clean(&dest))
+}
+
+/// Met à la corbeille (récupérable) ; le dossier racine ouvert ne peut pas être supprimé.
+#[tauri::command]
+async fn fs_trash(state: State<'_, Root>, path: String) -> Result<(), String> {
+    let p = check(&state, &path)?;
+    if state.0.lock().map_err(|e| e.to_string())?.as_ref() == Some(&p) { return Err("Impossible de supprimer le dossier ouvert".into()); }
+    trash::delete(&p).map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn reveal(p: &str) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    std::process::Command::new("explorer").raw_arg(format!("/select,\"{}\"", p)).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+#[cfg(not(windows))]
+fn reveal(_: &str) -> Result<(), String> { Err("Disponible uniquement sous Windows".into()) }
+
+#[tauri::command]
+async fn fs_reveal(state: State<'_, Root>, path: String) -> Result<(), String> { reveal(&clean(&check(&state, &path)?)) }
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -106,7 +146,7 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![load_settings, save_settings, set_root, list_dir, read_file, write_file, create_file, sftp::profiles_list, sftp::profile_save, sftp::profile_delete, sftp::host_forget, sftp::sftp_connect, sftp::sftp_disconnect, sftp::sftp_list, sftp::sftp_read, sftp::sftp_write, sftp::sftp_create_file, sftp::sftp_mkdir, sftp::sftp_rename, sftp::sftp_remove, discord::discord_connect, discord::discord_update, discord::discord_disconnect])
+        .invoke_handler(tauri::generate_handler![load_settings, save_settings, set_root, list_dir, read_file, write_file, create_file, sftp::profiles_list, sftp::profile_save, sftp::profile_delete, sftp::host_forget, sftp::sftp_connect, sftp::sftp_disconnect, sftp::sftp_list, sftp::sftp_read, sftp::sftp_write, fs_mkdir, fs_rename, fs_trash, fs_reveal, sftp::ssh_config_import, sftp::sftp_create_file, sftp::sftp_mkdir, sftp::sftp_rename, sftp::sftp_remove, discord::discord_connect, discord::discord_update, discord::discord_disconnect])
         .run(tauri::generate_context!())
         .expect("erreur au lancement de l'application");
 }

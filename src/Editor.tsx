@@ -6,7 +6,8 @@ import { FileIcon } from "./lib/fileicons";
 import { extOn } from "./lib/extensions";
 import { MdPreview } from "./Markdown";
 import { runByKeys } from "./lib/commands";
-import { getDocs, subscribeDocs, docModel, setActive, close, dismissError, setCursor } from "./lib/docs";
+import { getDocs, subscribeDocs, docModel, setActive, close, dismissError, setCursor, closeOthers, closeRight, closeAll, moveTab, save } from "./lib/docs";
+import { openMenu } from "./ContextMenu";
 import { getSettings, subscribe, update } from "./lib/settings";
 import type { ThemeDef } from "./lib/themes";
 
@@ -40,7 +41,10 @@ export function Workbench({ welcome, theme }: { welcome: ReactNode; theme: Theme
   return (<>
     {st.error && <div className="banner" role="alert"><span>{st.error}</span><button onClick={dismissError}>Fermer</button></div>}
     {has && <div className="tabs" role="tablist">{st.tabs.map((t) => (
-      <div key={t.path} role="tab" aria-selected={t.path === st.active} className="tab" title={t.path} onClick={() => setActive(t.path)} onAuxClick={() => close(t.path)}>
+      <div key={t.path} role="tab" aria-selected={t.path === st.active} className="tab" title={t.path} draggable onClick={() => setActive(t.path)} onAuxClick={() => close(t.path)}
+        onDragStart={(e) => { e.dataTransfer.setData("text/plain", t.path); e.dataTransfer.effectAllowed = "move"; }} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+        onDrop={(e) => { e.preventDefault(); moveTab(e.dataTransfer.getData("text/plain"), t.path); }}
+        onContextMenu={(e) => { e.preventDefault(); setActive(t.path); openMenu(e.clientX, e.clientY, [{ label: "Fermer", run: () => close(t.path) }, { label: "Fermer les autres", run: () => closeOthers(t.path) }, { label: "Fermer à droite", run: () => closeRight(t.path) }, { label: "Tout fermer", run: closeAll }, { sep: true }, { label: "Enregistrer", run: () => { void save(); } }, { label: "Copier le chemin", run: () => void navigator.clipboard.writeText(t.path.replace(/^sftp:/, "")) }]); }}>
         <FileIcon name={t.name} /><span>{t.name}</span>{t.dirty && <i className="dot" role="img" aria-label="Modifications non enregistrées" />}
         <button aria-label={"Fermer " + t.name} onClick={(e) => { e.stopPropagation(); close(t.path); }}><Icon n="close" size={12} /></button>
       </div>))}{isMd && <button className="tabact" aria-pressed={s.mdPreview} onClick={() => update({ mdPreview: !s.mdPreview })}>Aperçu</button>}</div>}

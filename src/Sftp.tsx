@@ -5,8 +5,10 @@ import { Icon } from "./lib/icons";
 import { FileIcon } from "./lib/fileicons";
 import { inTauri } from "./lib/settings";
 import { openRemote } from "./lib/docs";
-import { newFile, newFolder, renameEntry, deleteEntry } from "./lib/sftpops";
-import { getSftp, subscribeSftp, loadProfiles, saveProfile, deleteProfile, connect, disconnect, cancelTrust, dismissSftpError, forgetHost, closeAsk, refreshTree, withReconnect, type Profile } from "./lib/sftp";
+import { newFile, newFolder, renameEntry, deleteEntry, newFileHere, newFolderHere } from "./lib/sftpops";
+import { openMenu } from "./ContextMenu";
+import { _ } from "./lib/translate";
+import { getSftp, subscribeSftp, loadProfiles, saveProfile, deleteProfile, connect, disconnect, cancelTrust, dismissSftpError, forgetHost, closeAsk, refreshTree, withReconnect, setCwd, importSshConfig, type Profile } from "./lib/sftp";
 
 interface RE { name: string; path: string; is_dir: boolean; size: number; }
 const sortE = (l: RE[]) => [...l].sort((a, b) => Number(b.is_dir) - Number(a.is_dir) || a.name.localeCompare(b.name, undefined, { numeric: true }));
@@ -22,9 +24,21 @@ function RChildren({ path, depth }: { path: string; depth: number }) {
 }
 function RNode({ e, depth }: { e: RE; depth: number }) {
   const [open, setOpen] = useState(false);
+  const cwd = useSyncExternalStore(subscribeSftp, () => getSftp().cwd);
+  const reveal = useSyncExternalStore(subscribeSftp, () => getSftp().reveal);
+  useEffect(() => { if (e.is_dir && reveal?.path === e.path) setOpen(true); }, [reveal]);
+  const parent = e.path.replace(/\/[^/]*$/, "") || "/";
+  const click = () => { setCwd(e.is_dir ? e.path : parent); if (e.is_dir) setOpen(!open); else void openRemote(e.path); };
+  const menu = (ev: React.MouseEvent) => {
+    ev.preventDefault(); setCwd(e.is_dir ? e.path : parent);
+    openMenu(ev.clientX, ev.clientY, [
+      ...(e.is_dir ? [{ label: "Nouveau fichier ici", run: () => newFile(e.path) }, { label: "Nouveau dossier ici", run: () => newFolder(e.path) }, { sep: true }] : [{ label: "Ouvrir", run: () => void openRemote(e.path) }]),
+      { label: "Renommer", run: () => renameEntry(e) }, { label: "Supprimer", danger: true, run: () => deleteEntry(e) }, { sep: true },
+      { label: "Copier le chemin", run: () => void navigator.clipboard.writeText(e.path) }]);
+  };
   return (<>
-    <div className="trow">
-      <button className="tnode" style={{ paddingLeft: 6 + depth * 14 }} onClick={() => (e.is_dir ? setOpen(!open) : void openRemote(e.path))} role="treeitem" aria-expanded={e.is_dir ? open : undefined}>
+    <div className="trow" onContextMenu={menu}>
+      <button className={"tnode" + (cwd === e.path ? " sel" : "")} style={{ paddingLeft: 6 + depth * 14 }} onClick={click} role="treeitem" aria-expanded={e.is_dir ? open : undefined}>
         <span className={"chev" + (open ? " open" : "")}>{e.is_dir && <Icon n="chev" size={12} />}</span><FileIcon name={e.name} dir={e.is_dir} /><span className="tname">{e.name}</span></button>
       <span className="ract">
         {e.is_dir && <><button aria-label={"Nouveau fichier dans " + e.name} title="Nouveau fichier" onClick={() => newFile(e.path)}><Icon n="plus" size={13} /></button>
@@ -54,6 +68,7 @@ export function Sftp() {
   };
   return (<>
     {s.ask && <AskName />}
+    {s.notice && <div className="banner col" role="status"><span>{s.notice}</span><span className="row2"><button onClick={dismissSftpError}>Fermer</button></span></div>}
     {s.error && <div className="banner col" role="alert"><span>{s.error}</span><span className="row2">
       {s.changedFor && <button onClick={() => forgetHost(s.changedFor!)}>Oublier l’ancienne empreinte</button>}<button onClick={dismissSftpError}>Fermer</button></span></div>}
     {s.trust && <div className="emptybox"><strong>Nouveau serveur</strong><span>Empreinte SHA256 :</span><code className="fp">{s.trust.fp}</code>
@@ -61,7 +76,7 @@ export function Sftp() {
       <button className="btn" onClick={() => connect(s.trust!.id, s.trust!.secret, s.trust!.fp)}>Faire confiance et se connecter</button><button onClick={cancelTrust}>Annuler</button></div>}
     {s.connected ? (<>
       <div className="rootname"><span title={s.connected.home}>{s.connected.name}</span><button onClick={disconnect}>Déconnecter</button></div>
-      <div className="row2 tools"><button onClick={() => newFile(s.connected!.home)} title="Nouveau fichier à la racine"><Icon n="plus" size={14} /></button><button onClick={() => newFolder(s.connected!.home)} title="Nouveau dossier à la racine"><Icon n="folderplus" size={14} /></button><button onClick={refreshTree} title="Actualiser"><Icon n="refresh" size={14} /></button></div>
+      <div className="row2 tools"><button onClick={() => newFileHere()} title="Nouveau fichier à la racine"><Icon n="plus" size={14} /></button><button onClick={() => newFolderHere()} title="Nouveau dossier à la racine"><Icon n="folderplus" size={14} /></button><button onClick={refreshTree} title="Actualiser"><Icon n="refresh" size={14} /></button></div>
       <div role="tree" key={s.connected.id}><RChildren path={s.connected.home} depth={0} /></div>
     </>) : form ? (
       <div className="sform">
@@ -83,9 +98,9 @@ export function Sftp() {
               <div className="sform"><input type="password" autoFocus placeholder={p.auth === "key" ? "Phrase secrète (facultatif)" : "Mot de passe"} value={secret} onChange={(e) => setSecret(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go(p.id)} />
                 <div className="row2"><button className="btn" onClick={() => go(p.id)}>Connexion</button><button onClick={() => { setAsking(null); setSecret(""); }}>Annuler</button></div></div>
             ) : (<div className="row2"><button className="btn" disabled={s.busy} onClick={() => setAsking(p.id)}>{s.busy ? "…" : "Connecter"}</button>
-              <button onClick={() => setForm(p)}>Modifier</button><button onClick={() => window.confirm(`Supprimer « ${p.name} » ?`) && deleteProfile(p.id)}>Supprimer</button></div>)}
+              <button onClick={() => setForm(p)}>Modifier</button><button onClick={() => window.confirm(_("Supprimer « {name} » ?", { name: p.name })) && deleteProfile(p.id)}>Supprimer</button></div>)}
           </div>))}
-      <button className="btn" style={{ marginTop: 10 }} onClick={() => setForm(blank())}>Nouvelle connexion</button>
+      <div className="row2" style={{ marginTop: 10 }}><button className="btn" onClick={() => setForm(blank())}>Nouvelle connexion</button><button onClick={importSshConfig} title="Importer vos serveurs déjà configurés dans ~/.ssh/config">Importer ~/.ssh/config</button></div>
     </>)}
   </>);
 }

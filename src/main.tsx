@@ -1,6 +1,11 @@
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { App } from "./App";
-import { loadSettings } from "./lib/settings";
+import { loadSettings, getSettings, subscribe } from "./lib/settings";
 import { startDiscordSync } from "./lib/discord";
-loadSettings().then(() => { startDiscordSync(); createRoot(document.getElementById("root")!).render(<App />); });
+import { restoreSession } from "./lib/docs";
+import { setLanguage } from "./lib/translate";
+loadSettings().then(() => {
+  setLanguage(getSettings().language); subscribe(() => setLanguage(getSettings().language));
+  startDiscordSync(); createRoot(document.getElementById("root")!).render(<App />); void restoreSession();
+});

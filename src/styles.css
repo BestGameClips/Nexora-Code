@@ -102,3 +102,8 @@ kbd{background:var(--bg3);border:1px solid var(--bd);border-radius:calc(var(--r)
 .ract{display:none;gap:2px;position:absolute;right:2px;background:var(--bg2);border-radius:var(--r)}
 .trow:hover .ract,.trow:focus-within .ract{display:flex}.ract button{width:22px;height:22px;padding:0;display:grid;place-items:center}
 .tools{margin-bottom:6px}.tools button{padding:3px 8px;display:grid;place-items:center}
+.ctxmenu{position:fixed;z-index:60;min-width:210px;padding:4px;display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--rl);box-shadow:0 12px 32px #0007}
+.ctxmenu button{border:0;background:none;text-align:left;padding:6px 12px;border-radius:var(--r)}.ctxmenu button:hover:not(:disabled){background:var(--sel)}
+.ctxmenu .danger{color:#e5534b}.ctxmenu hr{border:0;border-top:1px solid var(--bd);margin:4px 0;width:100%}
+.tab[draggable=true]{cursor:grab}.tnode.sel{background:var(--sel)}
+.sbtn{background:none;border:0;color:inherit;padding:0 6px;border-radius:var(--r);font:inherit}.sbtn:hover{background:#0003}
