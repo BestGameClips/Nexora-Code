@@ -1,11 +1,13 @@
-# Nexura Code
+# Nexora Code
+
+**Imagine. Code. Create.**
 
 **Un environnement de développement desktop moderne, personnalisable et en cours de construction.**
 
 > [!CAUTION]
 > **PROJET EN DÉVELOPPEMENT — TÉLÉCHARGEMENT ET UTILISATION DÉCONSEILLÉS POUR LE MOMENT**
 >
-> RustIDE Ultimate dispose déjà d'une **base utilisable**, mais il ne s'agit **pas d'une version stable ni prête pour une utilisation quotidienne**. De nombreuses fonctionnalités sont encore en développement, peuvent être incomplètes ou présenter des bugs.
+> Nexora Code dispose déjà d'une **base utilisable**, mais il ne s'agit **pas d'une version stable ni prête pour une utilisation quotidienne**. De nombreuses fonctionnalités sont encore en développement, peuvent être incomplètes ou présenter des bugs.
 >
 > **Il n'existe actuellement aucun système de mise à jour intégré ou automatique.** Une version téléchargée aujourd'hui ne recevra donc pas automatiquement les correctifs et améliorations à venir.
 >
@@ -13,7 +15,7 @@
 
 ## Présentation
 
-**RustIDE Ultimate** est un projet d'IDE (environnement de développement intégré) pour ordinateur, visant à proposer une interface moderne, une édition de code agréable et, progressivement, les outils nécessaires au développement logiciel au même endroit.
+**Nexora Code** est un projet d'IDE (environnement de développement intégré) pour ordinateur, visant à proposer une interface moderne, une édition de code agréable et, progressivement, les outils nécessaires au développement logiciel au même endroit.
 
 L'objectif à long terme est de proposer une alternative personnalisable aux éditeurs de code traditionnels, avec un accent sur l'ergonomie, les performances, la sécurité et l'extensibilité.
 
@@ -57,7 +59,7 @@ La priorité est de livrer des fonctions réellement fiables et vérifiables, pl
 
 ## Technologies envisagées
 
-L'architecture cible définie pour RustIDE Ultimate s'appuie principalement sur :
+L'architecture cible définie pour Nexora Code s'appuie principalement sur :
 
 | Domaine | Technologies ciblées |
 | --- | --- |
@@ -74,7 +76,7 @@ Cette liste présente la **stack cible** du projet. Elle ne garantit pas que tou
 
 ## Pourquoi le téléchargement est-il déconseillé ?
 
-RustIDE Ultimate est encore un projet expérimental. À ce stade :
+Nexora Code est encore un projet expérimental. À ce stade :
 
 1. **La stabilité n'est pas garantie.** Certaines actions peuvent provoquer des erreurs ou des comportements inattendus.
 2. **Des fonctions peuvent être absentes ou incomplètes.** L'interface est amenée à changer.
@@ -112,7 +114,7 @@ Ces cases ne constituent pas un audit du code actuel : elles représentent les *
 
 ## Mises à jour et versions
 
-**RustIDE Ultimate ne propose actuellement ni vérification automatique des nouvelles versions, ni téléchargement de correctifs depuis l'application, ni mise à jour automatique.**
+**Nexora Code ne propose actuellement ni vérification automatique des nouvelles versions, ni téléchargement de correctifs depuis l'application, ni mise à jour automatique.**
 
 Le système de publication et de mise à jour fait partie des objectifs futurs. Tant qu'il n'est pas implémenté et testé, toute version obtenue doit être considérée comme indépendante et potentiellement rapidement obsolète.
 
@@ -126,7 +128,7 @@ Le projet étant encore en construction, les conventions de contribution et les 
 
 ## Questions fréquentes
 
-**Puis-je utiliser RustIDE Ultimate dès maintenant ?**  
+**Puis-je utiliser Nexora Code dès maintenant ?**  
 Une base utilisable existe, mais **l'utilisation n'est pas recommandée pour le moment**, en particulier comme IDE principal.
 
 **Le projet est-il abandonné ?**  
@@ -148,6 +150,6 @@ Pas nécessairement. Certains éléments peuvent encore être incomplets, expér
 
 ### Note finale
 
-RustIDE Ultimate est un projet ambitieux qui se construit étape par étape. **La base actuelle permet de faire avancer le développement, mais ne constitue pas encore un produit finalisé.** Merci de votre intérêt et de votre compréhension pendant cette phase de développement.
+Nexora Code est un projet ambitieux qui se construit étape par étape. **La base actuelle permet de faire avancer le développement, mais ne constitue pas encore un produit finalisé.** Merci de votre intérêt et de votre compréhension pendant cette phase de développement.
 
 **Statut :** développement actif · **Stabilité :** non garantie · **Mises à jour automatiques :** indisponibles · **Téléchargement :** déconseillé pour le moment
