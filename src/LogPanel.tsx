@@ -25,6 +25,6 @@ export function LogPanel() {
         {(j.state === "queued" || j.state === "running") && <button onClick={() => cancelJob(j.id)}>Annuler</button>}
         {(j.state === "error" || j.state === "cancelled") && <button onClick={() => retryJob(j.id)}>Réessayer</button>}</div>);
     })) : (entries.length === 0 ? <p className="empty">Aucune entrée dans le journal.</p> : [...entries].reverse().map((e, i) => (
-      <div className={"logrow " + e.level} key={i}><span className="lt">{time(e.t)}</span><span>{e.msg}</span></div>))}
+      <div className={"logrow " + e.level} key={i}><span className="lt">{time(e.t)}</span><span>{e.msg}</span></div>)))}
   </>);
 }

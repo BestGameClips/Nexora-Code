@@ -64,7 +64,7 @@ export const EN: Record<string, string> = {
   "Changer les fins de ligne (LF/CRLF)": "Change line endings (LF/CRLF)", "Restaurer la session": "Restore session",
   "Transférer": "Transfer", "Envoyer des fichiers ici…": "Upload files here…", "Envoyer un dossier ici…": "Upload a folder here…", "Télécharger la sélection…": "Download the selection…", "Télécharger…": "Download…",
   "Afficher les transferts et le journal": "Show transfers and log", "Afficher les transferts SFTP": "Show SFTP transfers", "Afficher le journal": "Show the log", "Transferts": "Transfers",
-  "Journal": "Log", "Effacer les terminés": "Clear finished", "Effacer le journal": "Clear the log", "Aucun transfert.": "No transfers.", "Aucune entrée dans le journal.": "No log entries.",
+  "Effacer les terminés": "Clear finished", "Effacer le journal": "Clear the log", "Aucun transfert.": "No transfers.", "Aucune entrée dans le journal.": "No log entries.",
   "En attente": "Queued", "En cours": "Running", "Terminé": "Done", "Erreur": "Error", "Annulé": "Cancelled", "Ignoré (existe déjà)": "Skipped (already exists)", "Réessayer": "Retry",
   "Début : {name}": "Started: {name}", "Terminé : {name}": "Finished: {name}", "Annulé : {name}": "Cancelled: {name}", "Ignoré (existe déjà) : {name}": "Skipped (already exists): {name}",
   "« {name} » existe déjà. Le remplacer ?": "“{name}” already exists. Replace it?", "{n} fichier(s) ignoré(s) (.git, node_modules)": "{n} file(s) skipped (.git, node_modules)",
