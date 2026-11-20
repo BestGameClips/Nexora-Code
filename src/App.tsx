@@ -17,6 +17,7 @@ import { buildPresence } from "./lib/presence";
 import { FileIcon } from "./lib/fileicons";
 import { MenuHost } from "./ContextMenu";
 import { AskHost } from "./Ask";
+import { Toasts } from "./Toasts";
 import { LogPanel } from "./LogPanel";
 import { showPanel } from "./lib/log";
 import { newFileHere } from "./lib/sftpops";
@@ -148,6 +149,7 @@ export function App() {
       <StatusBar themeName={themeDef.name} />
       <MenuHost />
       <AskHost />
+      <Toasts />
       {newFile && <NewFile onClose={() => setNewFile(false)} />}
       {palette && <Palette onClose={() => setPalette(false)} />}
     </div>
@@ -244,7 +246,7 @@ function StatusBar({ themeName }: { themeName: string }) {
   const c = useSyncExternalStore(subscribeCursor, getCursor);
   const sf = useSyncExternalStore(subscribeSftp, getSftp);
   const dc = useSyncExternalStore(subscribeDiscord, getDiscord);
-  return <footer className="status"><span>{SHORT} v0.1.0</span>{sf.connected && <span>SFTP : {sf.connected.name}</span>}{dc.state === "connected" && <span title="Présence Discord active">Discord ●</span>}<span className="grow" />
+  return <footer className="status"><span>{SHORT} v0.1.0</span>{sf.connected && <span>{`SFTP : ${sf.connected.name}`}{sf.order.length > 1 ? ` (+${sf.order.length - 1})` : ""}</span>}{dc.state === "connected" && <span title="Présence Discord active">Discord ●</span>}<span className="grow" />
     {c && <><span>Ln {c.ln}, Col {c.col}</span><span>{c.lang}</span><button className="sbtn" onClick={toggleEol} title="Changer les fins de ligne (LF/CRLF)">{c.eol}</button><span>Espaces : {c.tab}</span></>}<span>{themeName}</span></footer>;
 }
 

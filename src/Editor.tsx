@@ -7,11 +7,27 @@ import { extOn } from "./lib/extensions";
 import { MdPreview } from "./Markdown";
 import { runByKeys } from "./lib/commands";
 import { getDocs, subscribeDocs, docModel, setActive, close, dismissError, setCursor, closeOthers, closeRight, closeAll, moveTab, save } from "./lib/docs";
-import { openMenu } from "./ContextMenu";
+import { openMenu, type MenuItem } from "./ContextMenu";
+import { trashLocal, revealInOs, copyText, relPath } from "./lib/fsops";
+import { deleteEntry } from "./lib/sftpops";
+import { parseRemoteKey, basename } from "./lib/docs";
 import { getSettings, subscribe, update } from "./lib/settings";
 import type { ThemeDef } from "./lib/themes";
 
 (self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = { getWorker: () => new EditorWorker() };
+
+/** Menu du clic droit sur un onglet (le clic droit n'est plus traité comme un clic du milieu). */
+function tabMenu(t: { path: string; name: string }): MenuItem[] {
+  const r = parseRemoteKey(t.path), name = r ? basename(r.path) : t.name;
+  return [
+    { label: "Fermer", run: () => close(t.path) }, { label: "Fermer les autres", run: () => closeOthers(t.path) }, { label: "Fermer à droite", run: () => closeRight(t.path) }, { label: "Tout fermer", run: closeAll }, { sep: true },
+    { label: "Enregistrer", run: () => { setActive(t.path); void save(); } }, { sep: true },
+    { label: "Copier le nom", run: () => copyText(name) }, { label: "Copier le chemin", run: () => copyText(r ? r.path : t.path) },
+    { label: "Copier le chemin relatif", disabled: !!r, run: () => copyText(relPath(t.path)) },
+    { label: "Afficher dans l’explorateur Windows", disabled: !!r, run: () => revealInOs(t.path) }, { sep: true },
+    { label: "Supprimer le fichier", danger: true, run: () => void (r ? deleteEntry(r.sid, { name, path: r.path, is_dir: false }) : trashLocal(t)) },
+  ];
+}
 
 export function Workbench({ welcome, theme }: { welcome: ReactNode; theme: ThemeDef }) {
   const st = useSyncExternalStore(subscribeDocs, getDocs);
@@ -41,10 +57,10 @@ export function Workbench({ welcome, theme }: { welcome: ReactNode; theme: Theme
   return (<>
     {st.error && <div className="banner" role="alert"><span>{st.error}</span><button onClick={dismissError}>Fermer</button></div>}
     {has && <div className="tabs" role="tablist">{st.tabs.map((t) => (
-      <div key={t.path} role="tab" aria-selected={t.path === st.active} className="tab" title={t.path} draggable onClick={() => setActive(t.path)} onAuxClick={() => close(t.path)}
+      <div key={t.path} role="tab" aria-selected={t.path === st.active} className="tab" title={t.path} draggable onClick={() => setActive(t.path)} onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }} onAuxClick={(e) => { if (e.button === 1) close(t.path); }}
         onDragStart={(e) => { e.dataTransfer.setData("text/plain", t.path); e.dataTransfer.effectAllowed = "move"; }} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
         onDrop={(e) => { e.preventDefault(); moveTab(e.dataTransfer.getData("text/plain"), t.path); }}
-        onContextMenu={(e) => { e.preventDefault(); setActive(t.path); openMenu(e.clientX, e.clientY, [{ label: "Fermer", run: () => close(t.path) }, { label: "Fermer les autres", run: () => closeOthers(t.path) }, { label: "Fermer à droite", run: () => closeRight(t.path) }, { label: "Tout fermer", run: closeAll }, { sep: true }, { label: "Enregistrer", run: () => { void save(); } }, { label: "Copier le chemin", run: () => void navigator.clipboard.writeText(t.path.replace(/^sftp:/, "")) }]); }}>
+        onContextMenu={(e) => { e.preventDefault(); setActive(t.path); openMenu(e.clientX, e.clientY, tabMenu(t)); }}>
         <FileIcon name={t.name} /><span>{t.name}</span>{t.dirty && <i className="dot" role="img" aria-label="Modifications non enregistrées" />}
         <button aria-label={"Fermer " + t.name} onClick={(e) => { e.stopPropagation(); close(t.path); }}><Icon n="close" size={12} /></button>
       </div>))}{isMd && <button className="tabact" aria-pressed={s.mdPreview} onClick={() => update({ mdPreview: !s.mdPreview })}>Aperçu</button>}</div>}

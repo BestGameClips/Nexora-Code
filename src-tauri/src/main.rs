@@ -132,13 +132,54 @@ fn reveal(_: &str) -> Result<(), String> { Err("Disponible uniquement sous Windo
 #[tauri::command]
 async fn fs_reveal(state: State<'_, Root>, path: String) -> Result<(), String> { reveal(&clean(&check(&state, &path)?)) }
 
+fn copy_rec(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    let ft = fs::symlink_metadata(src)?.file_type();
+    if ft.is_symlink() { return Ok(()); }
+    if ft.is_dir() {
+        fs::create_dir_all(dst)?;
+        for e in fs::read_dir(src)? { let e = e?; copy_rec(&e.path(), &dst.join(e.file_name()))?; }
+        Ok(())
+    } else { fs::copy(src, dst).map(|_| ()) }
+}
+fn free_name(dir: &std::path::Path, name: &str) -> PathBuf {
+    let mut p = dir.join(name); let mut i = 1;
+    while p.exists() {
+        let (stem, ext) = match name.rsplit_once('.') { Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")), _ => (name.to_string(), String::new()) };
+        p = dir.join(format!("{stem} (copie {i}){ext}")); i += 1;
+    }
+    p
+}
+
+/// Copie un fichier ou dossier du dossier ouvert vers un autre dossier du dossier ouvert (jamais d'écrasement).
+#[tauri::command]
+async fn fs_copy(state: State<'_, Root>, src: String, dir: String) -> Result<String, String> {
+    let (s, d) = (check(&state, &src)?, check(&state, &dir)?);
+    if !d.is_dir() { return Err("Destination invalide".into()); }
+    if s.is_dir() && d.starts_with(&s) { return Err("Impossible de copier un dossier dans lui-même".into()); }
+    let name = s.file_name().ok_or("Nom invalide")?.to_string_lossy().to_string();
+    let dest = free_name(&d, &name);
+    copy_rec(&s, &dest).map_err(|e| e.to_string())?;
+    Ok(clean(&dest))
+}
+
+#[tauri::command]
+async fn fs_move(state: State<'_, Root>, src: String, dir: String) -> Result<String, String> {
+    let (s, d) = (check(&state, &src)?, check(&state, &dir)?);
+    if !d.is_dir() { return Err("Destination invalide".into()); }
+    if s.is_dir() && d.starts_with(&s) { return Err("Impossible de déplacer un dossier dans lui-même".into()); }
+    let dest = d.join(s.file_name().ok_or("Nom invalide")?);
+    if dest.exists() { return Err("Ce nom existe déjà".into()); }
+    fs::rename(&s, &dest).map_err(|e| e.to_string())?;
+    Ok(clean(&dest))
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Root(Mutex::new(None)))
         .manage(discord::DiscordState(Mutex::new(None)))
         .manage(sftp::TransferState::default())
-        .manage(sftp::SftpState(tauri::async_runtime::Mutex::new(None)))
+        .manage(sftp::SftpState::default())
         .setup(|_app| {
             #[cfg(windows)]
             if let Some(w) = _app.get_webview_window("main") {
@@ -147,7 +188,7 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![load_settings, save_settings, set_root, list_dir, read_file, write_file, create_file, sftp::profiles_list, sftp::profile_save, sftp::profile_delete, sftp::host_forget, sftp::sftp_connect, sftp::sftp_disconnect, sftp::sftp_list, sftp::sftp_read, sftp::sftp_write, sftp::sftp_upload, sftp::sftp_download, sftp::transfer_cancel, sftp::local_walk, sftp::local_mkdir_all, sftp::sftp_mkdir_p, fs_mkdir, fs_rename, fs_trash, fs_reveal, sftp::ssh_config_import, sftp::sftp_create_file, sftp::sftp_mkdir, sftp::sftp_rename, sftp::sftp_remove, discord::discord_connect, discord::discord_update, discord::discord_disconnect])
+        .invoke_handler(tauri::generate_handler![load_settings, save_settings, set_root, list_dir, read_file, write_file, create_file, sftp::profiles_list, sftp::profile_save, sftp::profile_delete, sftp::host_forget, sftp::sftp_connect, sftp::sftp_disconnect, sftp::sftp_list, sftp::sftp_read, sftp::sftp_write, fs_copy, fs_move, sftp::sftp_upload, sftp::sftp_download, sftp::transfer_cancel, sftp::local_walk, sftp::local_mkdir_all, sftp::sftp_mkdir_p, fs_mkdir, fs_rename, fs_trash, fs_reveal, sftp::ssh_config_import, sftp::sftp_create_file, sftp::sftp_mkdir, sftp::sftp_rename, sftp::sftp_remove, discord::discord_connect, discord::discord_update, discord::discord_disconnect])
         .run(tauri::generate_context!())
         .expect("erreur au lancement de l'application");
 }

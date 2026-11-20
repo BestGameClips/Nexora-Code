@@ -112,3 +112,8 @@ kbd{background:var(--bg3);border:1px solid var(--bd);border-radius:calc(var(--r)
 .jbar{height:5px;border-radius:var(--rp);background:var(--bg3);overflow:hidden;margin-top:3px}.jbar i{display:block;height:100%;background:var(--ac)}.jbar i.error{background:#e5534b}.jbar i.cancelled,.jbar i.skipped{background:var(--fg2)}
 .jst{flex:none;color:var(--fg2);font-size:.85em;min-width:120px;text-align:right}.job button{padding:1px 10px}
 .logrow{display:flex;gap:10px;font:.88em ui-monospace,Consolas,monospace;padding:1px 0}.logrow .lt{color:var(--fg2);flex:none}.logrow.error{color:#e5534b}.logrow.warn{color:#d9a21b}
+.toasts{position:fixed;right:14px;bottom:38px;z-index:70;display:flex;flex-direction:column;gap:8px;width:min(360px,90vw)}
+.toast{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--bd);border-left:4px solid var(--ac);border-radius:var(--rl);box-shadow:0 8px 28px #0006}
+.toast.error{border-left-color:#e5534b}.toast.info{border-left-color:var(--fg2)}.toast button{width:22px;height:22px;padding:0;display:grid;place-items:center;border:0;background:none}
+@media (prefers-reduced-motion:no-preference){.toast{animation:in .15s ease-out}}
+.sess{margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--bd)}.sess.act .rootname>span{color:var(--ac)}

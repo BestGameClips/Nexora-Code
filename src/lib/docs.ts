@@ -2,13 +2,14 @@ import * as monaco from "monaco-editor";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { inTauri, getSettings, update } from "./settings";
-import { withReconnect } from "./sftp";
+import { withReconnect, getSftp } from "./sftp";
+import { toast } from "./toast";
 import { _ } from "./translate";
 import { log } from "./log";
 
 export interface Tab { path: string; name: string; dirty: boolean; }
 export interface DocsState { tabs: Tab[]; active: string | null; root: string | null; error: string | null; treeVersion: number; cwd: string | null; reveal: { path: string; n: number } | null; }
-interface Doc { model: monaco.editor.ITextModel; saved: number; remote?: { path: string; mtime: number | null }; }
+interface Doc { model: monaco.editor.ITextModel; saved: number; remote?: { session: string; path: string; mtime: number | null }; }
 const docs = new Map<string, Doc>();
 const pending = new Set<string>();
 const subs = new Set<() => void>();
@@ -45,8 +46,8 @@ async function persist(path: string, force = false): Promise<void> {
   const d = docs.get(path); if (!d) return;
   try {
     if (d.remote) {
-      const r = await withReconnect(() => invoke<{ mtime: number | null }>("sftp_write", { path: d.remote!.path, content: d.model.getValue(), expectedMtime: d.remote!.mtime, force }));
-      d.remote.mtime = r.mtime; log("info", _("Enregistré sur le serveur : {name}", { name: d.remote.path }));
+      const r = await withReconnect(() => invoke<{ mtime: number | null }>("sftp_write", { session: d.remote!.session, path: d.remote!.path, content: d.model.getValue(), expectedMtime: d.remote!.mtime, force }), d.remote.session);
+      d.remote.mtime = r.mtime; log("info", _("Enregistré sur le serveur : {name}", { name: d.remote.path })); toast("success", _("Enregistré sur le serveur : {name}", { name: basename(d.remote.path) }));
     } else await invoke("write_file", { path, content: d.model.getValue() });
     d.saved = d.model.getAlternativeVersionId(); setDirty(path, false);
   } catch (e) {
@@ -112,17 +113,19 @@ export const getCursor = () => cursor;
 export const subscribeCursor = (f: () => void) => { csubs.add(f); return () => { csubs.delete(f); }; };
 export function setCursor(c: Cursor | null) { if (JSON.stringify(c) === JSON.stringify(cursor)) return; cursor = c; csubs.forEach((f) => f()); }
 
-export async function openRemote(remotePath: string) {
-  const key = "sftp:" + remotePath;
+export const parseRemoteKey = (k: string) => { const m = /^sftp:([^:]+):(.*)$/s.exec(k); return m ? { sid: m[1], path: m[2] } : null; };
+export async function openRemote(sid: string, remotePath: string) {
+  const key = `sftp:${sid}:${remotePath}`;
   if (docs.has(key)) return set({ active: key });
   if (pending.has(key)) return;
   pending.add(key);
   try {
-    const f = await withReconnect(() => invoke<{ content: string; mtime: number | null }>("sftp_read", { path: remotePath }));
-    const model = monaco.editor.createModel(f.content, undefined, monaco.Uri.from({ scheme: "sftp", path: remotePath }));
-    docs.set(key, { model, saved: model.getAlternativeVersionId(), remote: { path: remotePath, mtime: f.mtime } });
+    const f = await withReconnect(() => invoke<{ content: string; mtime: number | null }>("sftp_read", { session: sid, path: remotePath }), sid);
+    const model = monaco.editor.createModel(f.content, undefined, monaco.Uri.from({ scheme: "sftp", authority: sid, path: remotePath }));
+    docs.set(key, { model, saved: model.getAlternativeVersionId(), remote: { session: sid, path: remotePath, mtime: f.mtime } });
     model.onDidChangeContent(() => { const x = docs.get(key); if (x) setDirty(key, model.getAlternativeVersionId() !== x.saved); });
-    set({ tabs: [...state.tabs, { path: key, name: basename(remotePath), dirty: false }], active: key, error: null });
+    const g = getSftp(), suffix = g.order.length > 1 ? ` (${g.sessions[sid]?.name ?? sid})` : "";
+    set({ tabs: [...state.tabs, { path: key, name: basename(remotePath) + suffix, dirty: false }], active: key, error: null });
   } catch (e) { set({ error: `Ouverture distante impossible : ${e}` }); }
   finally { pending.delete(key); }
 }

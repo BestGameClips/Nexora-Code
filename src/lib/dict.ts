@@ -71,6 +71,10 @@ export const EN: Record<string, string> = {
   "Remplacer les fichiers qui existent déjà sur le serveur ? (Annuler : les ignorer)": "Replace files that already exist on the server? (Cancel: skip them)",
   "Remplacer les fichiers qui existent déjà sur cet ordinateur ? (Annuler : les ignorer)": "Replace files that already exist on this computer? (Cancel: skip them)",
   "Dossier trop volumineux (plus de 20 000 fichiers)": "Folder too large (more than 20,000 files)", "Connecté à {name}": "Connected to {name}", "Déconnecté": "Disconnected", "Enregistré sur le serveur : {name}": "Saved on the server: {name}",
+  "Déconnecté de {name}": "Disconnected from {name}", "Reconnecté à {name}": "Reconnected to {name}", "Transfert réussi": "Transfer successful", "{n} transferts réussis": "{n} transfers succeeded", "{n} transfert(s) échoué(s) sur {t}": "{n} of {t} transfer(s) failed",
+  "Copié dans le presse-papiers": "Copied to the clipboard", "Copie impossible": "Copy failed", "Fichier créé : {name}": "File created: {name}", "Dossier créé : {name}": "Folder created: {name}", "Renommé : {name}": "Renamed: {name}", "Supprimé : {name}": "Deleted: {name}",
+  "Mis à la corbeille : {name}": "Moved to the Recycle Bin: {name}", "« {name} » copié": "“{name}” copied", "« {name} » coupé": "“{name}” cut", "Collé : {name}": "Pasted: {name}",
+  "Copier": "Copy", "Couper": "Cut", "Coller ici": "Paste here", "Copier le nom": "Copy name", "Copier le chemin relatif": "Copy relative path", "Supprimer le fichier": "Delete file", "Connexions": "Connections", "Nouvelle connexion SFTP": "New SFTP connection",
   "Tab": "Tab",
 };
 /** Chaînes dynamiques (avec valeurs insérées). */

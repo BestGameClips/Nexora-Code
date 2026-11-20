@@ -11,7 +11,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 fn es<E: std::fmt::Display>(e: E) -> String { e.to_string() }
 
 pub struct Conn { _handle: client::Handle<H>, sftp: Arc<SftpSession> }
-pub struct SftpState(pub tauri::async_runtime::Mutex<Option<Conn>>);
+#[derive(Default)]
+pub struct SftpState(pub tauri::async_runtime::Mutex<HashMap<String, Conn>>);
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Profile { id: String, name: String, host: String, port: u16, user: String, auth: String, #[serde(default)] key_path: Option<String> }
@@ -105,21 +106,21 @@ pub async fn sftp_connect(app: AppHandle, state: State<'_, SftpState>, id: Strin
     ch.request_subsystem(true, "sftp").await.map_err(es)?;
     let sftp = SftpSession::new(ch.into_stream()).await.map_err(es)?;
     let home = sftp.canonicalize(".").await.map_err(es)?;
-    *state.0.lock().await = Some(Conn { _handle: session, sftp: Arc::new(sftp) });
+    state.0.lock().await.insert(id.clone(), Conn { _handle: session, sftp: Arc::new(sftp) });
     Ok(home)
 }
 
 #[tauri::command]
-pub async fn sftp_disconnect(state: State<'_, SftpState>) -> Result<(), String> { *state.0.lock().await = None; Ok(()) }
+pub async fn sftp_disconnect(state: State<'_, SftpState>, session: String) -> Result<(), String> { state.0.lock().await.remove(&session); Ok(()) }
 
 #[derive(Serialize)]
 pub struct RemoteEntry { name: String, path: String, is_dir: bool, size: u64 }
 
 #[tauri::command]
-pub async fn sftp_list(state: State<'_, SftpState>, path: String) -> Result<Vec<RemoteEntry>, String> {
-    let g = state.0.lock().await; let c = g.as_ref().ok_or("Non connecté")?;
+pub async fn sftp_list(state: State<'_, SftpState>, session: String, path: String) -> Result<Vec<RemoteEntry>, String> {
+    let s = conn_sftp(&state, &session).await?;
     let mut out = Vec::new();
-    for e in c.sftp.read_dir(path.clone()).await.map_err(es)? {
+    for e in s.read_dir(path.clone()).await.map_err(es)? {
         let name = e.file_name();
         if name == "." || name == ".." { continue; }
         let m = e.metadata();
@@ -132,8 +133,8 @@ pub async fn sftp_list(state: State<'_, SftpState>, path: String) -> Result<Vec<
 pub struct RemoteFile { content: String, size: u64, mtime: Option<u32> }
 
 #[tauri::command]
-pub async fn sftp_read(state: State<'_, SftpState>, path: String) -> Result<RemoteFile, String> {
-    let g = state.0.lock().await; let s = &g.as_ref().ok_or("Non connecté")?.sftp;
+pub async fn sftp_read(state: State<'_, SftpState>, session: String, path: String) -> Result<RemoteFile, String> {
+    let s = conn_sftp(&state, &session).await?;
     let m = s.metadata(path.clone()).await.map_err(es)?;
     let size = m.size.unwrap_or(0);
     if size > 5_000_000 { return Err("Fichier trop volumineux (> 5 Mo)".into()); }
@@ -149,8 +150,8 @@ pub struct WriteRes { mtime: Option<u32> }
 
 /// Écriture en place (les permissions du fichier sont conservées). Refuse d'écraser un fichier modifié sur le serveur sauf `force`.
 #[tauri::command]
-pub async fn sftp_write(state: State<'_, SftpState>, path: String, content: String, expected_mtime: Option<u32>, force: bool) -> Result<WriteRes, String> {
-    let g = state.0.lock().await; let s = &g.as_ref().ok_or("Non connecté")?.sftp;
+pub async fn sftp_write(state: State<'_, SftpState>, session: String, path: String, content: String, expected_mtime: Option<u32>, force: bool) -> Result<WriteRes, String> {
+    let s = conn_sftp(&state, &session).await?;
     if !force && expected_mtime.is_some() && s.metadata(path.clone()).await.map_err(es)?.mtime != expected_mtime { return Err("CONFLICT".into()); }
     let mut f = s.open_with_flags(path.clone(), OpenFlags::WRITE | OpenFlags::TRUNCATE).await.map_err(es)?;
     f.write_all(content.as_bytes()).await.map_err(es)?;
@@ -165,9 +166,9 @@ fn child(dir: &str, name: &str) -> String { format!("{}/{}", dir.trim_end_matche
 
 /// Les créations et renommages refusent d'écraser un nom existant.
 #[tauri::command]
-pub async fn sftp_create_file(state: State<'_, SftpState>, dir: String, name: String) -> Result<String, String> {
+pub async fn sftp_create_file(state: State<'_, SftpState>, session: String, dir: String, name: String) -> Result<String, String> {
     valid_name(&name)?;
-    let g = state.0.lock().await; let s = &g.as_ref().ok_or("Non connecté")?.sftp;
+    let s = conn_sftp(&state, &session).await?;
     let path = child(&dir, &name);
     if s.try_exists(path.clone()).await.map_err(es)? { return Err("Ce nom existe déjà".into()); }
     let mut f = s.open_with_flags(path.clone(), OpenFlags::CREATE | OpenFlags::WRITE).await.map_err(es)?;
@@ -176,18 +177,18 @@ pub async fn sftp_create_file(state: State<'_, SftpState>, dir: String, name: St
 }
 
 #[tauri::command]
-pub async fn sftp_mkdir(state: State<'_, SftpState>, dir: String, name: String) -> Result<(), String> {
+pub async fn sftp_mkdir(state: State<'_, SftpState>, session: String, dir: String, name: String) -> Result<(), String> {
     valid_name(&name)?;
-    let g = state.0.lock().await; let s = &g.as_ref().ok_or("Non connecté")?.sftp;
+    let s = conn_sftp(&state, &session).await?;
     let path = child(&dir, &name);
     if s.try_exists(path.clone()).await.map_err(es)? { return Err("Ce nom existe déjà".into()); }
     s.create_dir(path).await.map(|_| ()).map_err(es)
 }
 
 #[tauri::command]
-pub async fn sftp_rename(state: State<'_, SftpState>, path: String, new_name: String) -> Result<String, String> {
+pub async fn sftp_rename(state: State<'_, SftpState>, session: String, path: String, new_name: String) -> Result<String, String> {
     valid_name(&new_name)?;
-    let g = state.0.lock().await; let s = &g.as_ref().ok_or("Non connecté")?.sftp;
+    let s = conn_sftp(&state, &session).await?;
     let parent = path.rsplit_once('/').map(|x| x.0).unwrap_or("");
     let dest = format!("{}/{}", parent, new_name);
     if s.try_exists(dest.clone()).await.map_err(es)? { return Err("Ce nom existe déjà".into()); }
@@ -197,9 +198,9 @@ pub async fn sftp_rename(state: State<'_, SftpState>, path: String, new_name: St
 
 /// Supprime un fichier ou un dossier VIDE (jamais de suppression récursive).
 #[tauri::command]
-pub async fn sftp_remove(state: State<'_, SftpState>, path: String, is_dir: bool) -> Result<(), String> {
+pub async fn sftp_remove(state: State<'_, SftpState>, session: String, path: String, is_dir: bool) -> Result<(), String> {
     if path.is_empty() || path == "/" { return Err("Suppression refusée".into()); }
-    let g = state.0.lock().await; let s = &g.as_ref().ok_or("Non connecté")?.sftp;
+    let s = conn_sftp(&state, &session).await?;
     (if is_dir { s.remove_dir(path).await.map(|_| ()) } else { s.remove_file(path).await.map(|_| ()) })
         .map_err(|e| if is_dir { format!("Impossible de supprimer le dossier (est-il vide ?) : {e}") } else { es(e) })
 }
@@ -241,14 +242,14 @@ pub struct TransferState(pub StdMutex<HashMap<String, Arc<AtomicBool>>>);
 #[derive(Serialize, Clone)]
 struct Progress { id: String, done: u64, total: u64 }
 
-async fn conn_sftp(state: &State<'_, SftpState>) -> Result<Arc<SftpSession>, String> {
-    Ok(state.0.lock().await.as_ref().ok_or("Non connecté")?.sftp.clone())
+async fn conn_sftp(state: &State<'_, SftpState>, sid: &str) -> Result<Arc<SftpSession>, String> {
+    Ok(state.0.lock().await.get(sid).ok_or("Non connecté")?.sftp.clone())
 }
 
 /// Envoi vers `<dest>.nexora-part` puis remplacement : un envoi interrompu ne détruit jamais le fichier distant existant.
 #[tauri::command]
-pub async fn sftp_upload(app: AppHandle, state: State<'_, SftpState>, tr: State<'_, TransferState>, id: String, local: String, remote: String, overwrite: bool) -> Result<(), String> {
-    let sftp = conn_sftp(&state).await?;
+pub async fn sftp_upload(app: AppHandle, state: State<'_, SftpState>, session: String, tr: State<'_, TransferState>, id: String, local: String, remote: String, overwrite: bool) -> Result<(), String> {
+    let sftp = conn_sftp(&state, &session).await?;
     if !overwrite && sftp.try_exists(remote.clone()).await.map_err(es)? { return Err("EXISTS".into()); }
     let flag = Arc::new(AtomicBool::new(false));
     tr.0.lock().map_err(es)?.insert(id.clone(), flag.clone());
@@ -279,8 +280,8 @@ pub async fn sftp_upload(app: AppHandle, state: State<'_, SftpState>, tr: State<
 }
 
 #[tauri::command]
-pub async fn sftp_download(app: AppHandle, state: State<'_, SftpState>, tr: State<'_, TransferState>, id: String, remote: String, local: String, overwrite: bool) -> Result<(), String> {
-    let sftp = conn_sftp(&state).await?;
+pub async fn sftp_download(app: AppHandle, state: State<'_, SftpState>, session: String, tr: State<'_, TransferState>, id: String, remote: String, local: String, overwrite: bool) -> Result<(), String> {
+    let sftp = conn_sftp(&state, &session).await?;
     if !overwrite && PathBuf::from(&local).exists() { return Err("EXISTS".into()); }
     if let Some(parent) = PathBuf::from(&local).parent() { tokio::fs::create_dir_all(parent).await.map_err(es)?; }
     let flag = Arc::new(AtomicBool::new(false));
@@ -343,8 +344,8 @@ pub async fn local_walk(dir: String) -> Result<Vec<LocalFile>, String> {
 pub async fn local_mkdir_all(path: String) -> Result<(), String> { fs::create_dir_all(path).map_err(es) }
 
 #[tauri::command]
-pub async fn sftp_mkdir_p(state: State<'_, SftpState>, path: String) -> Result<(), String> {
-    let s = conn_sftp(&state).await?;
+pub async fn sftp_mkdir_p(state: State<'_, SftpState>, session: String, path: String) -> Result<(), String> {
+    let s = conn_sftp(&state, &session).await?;
     let mut cur = String::new();
     for part in path.split('/').filter(|p| !p.is_empty()) {
         cur.push('/'); cur.push_str(part);

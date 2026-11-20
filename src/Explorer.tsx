@@ -4,7 +4,7 @@ import { Icon } from "./lib/icons";
 import { FileIcon } from "./lib/fileicons";
 import { openMenu } from "./ContextMenu";
 import { getDocs, subscribeDocs, openFile, openFolder, basename, setLocalCwd, refreshLocal } from "./lib/docs";
-import { newFileIn, newFolderIn, renameLocal, trashLocal, revealInOs } from "./lib/fsops";
+import { newFileIn, newFolderIn, renameLocal, trashLocal, revealInOs, getClip, setClip, pasteInto, copyText, relPath } from "./lib/fsops";
 
 interface Entry { name: string; path: string; is_dir: boolean; }
 const sortE = (l: Entry[]) => [...l].sort((a, b) => Number(b.is_dir) - Number(a.is_dir) || a.name.localeCompare(b.name, undefined, { numeric: true }));
@@ -31,8 +31,9 @@ function Node({ e, depth }: { e: Entry; depth: number }) {
     ev.preventDefault(); select();
     openMenu(ev.clientX, ev.clientY, [
       ...(e.is_dir ? [{ label: "Nouveau fichier ici", run: () => newFileIn(e.path) }, { label: "Nouveau dossier ici", run: () => newFolderIn(e.path) }, { sep: true }] : [{ label: "Ouvrir", run: () => void openFile(e.path) }]),
+      { label: "Copier", run: () => setClip(e, false) }, { label: "Couper", run: () => setClip(e, true) }, { label: "Coller ici", disabled: !getClip(), run: () => void pasteInto(e.is_dir ? e.path : parent) }, { sep: true },
       { label: "Renommer", run: () => renameLocal(e) }, { label: "Mettre à la corbeille", danger: true, run: () => void trashLocal(e) }, { sep: true },
-      { label: "Afficher dans l’explorateur Windows", run: () => revealInOs(e.path) }, { label: "Copier le chemin", run: () => void navigator.clipboard.writeText(e.path) }]);
+      { label: "Afficher dans l’explorateur Windows", run: () => revealInOs(e.path) }, { label: "Copier le nom", run: () => copyText(e.name) }, { label: "Copier le chemin", run: () => copyText(e.path) }, { label: "Copier le chemin relatif", run: () => copyText(relPath(e.path)) }]);
   };
   return (<>
     <div className="trow" onContextMenu={menu}>
