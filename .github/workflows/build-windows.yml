@@ -1,27 +1,67 @@
+
 name: build-windows
+
 on:
   push:
   workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: swatinem/rust-cache@v2
-        with: { workspaces: src-tauri }
-      - run: npm install
-      - run: npx tauri icon app-icon.png
-      - run: npx tauri build --no-bundle
-      - name: Dossier portable
+      - name: Recuperer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Installer Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Installer les dependances
+        run: npm ci
+
+      - name: Generer les icones
+        run: npx tauri icon app-icon.png
+
+      - name: Compiler Nexora Code
+        run: npx tauri build --no-bundle
+
+      - name: Creer le dossier portable
         shell: pwsh
         run: |
-          New-Item -ItemType Directory portable | Out-Null
+          New-Item -ItemType Directory -Path portable -Force | Out-Null
+
           Copy-Item src-tauri/target/release/rustide.exe portable/Nexora.exe
-          New-Item portable/portable.flag -ItemType File | Out-Null
-      - uses: actions/upload-artifact@v4
+
+          New-Item -ItemType File -Path portable/portable.flag -Force | Out-Null
+
+          $hash = (Get-FileHash portable/Nexora.exe -Algorithm SHA256).Hash
+          "$hash  Nexora.exe" | Set-Content portable/SHA256SUMS.txt -Encoding ascii
+
+      - name: Attester Nexora.exe
+        uses: actions/attest@v4
         with:
-          name: rustide-portable-windows
-          path: portable
+          subject-path: portable/Nexora.exe
+
+      - name: Publier Nexora Portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nexora-Code-Portable-Windows
+          path: portable/
+          if-no-files-found: error
+          retention-days: 90
