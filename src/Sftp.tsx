@@ -7,8 +7,10 @@ import { inTauri } from "./lib/settings";
 import { openRemote } from "./lib/docs";
 import { newFile, newFolder, renameEntry, deleteEntry, newFileHere, newFolderHere } from "./lib/sftpops";
 import { openMenu } from "./ContextMenu";
+import { uploadFiles, uploadFolder, download } from "./lib/transfers";
+import { showPanel } from "./lib/log";
 import { _ } from "./lib/translate";
-import { getSftp, subscribeSftp, loadProfiles, saveProfile, deleteProfile, connect, disconnect, cancelTrust, dismissSftpError, forgetHost, closeAsk, refreshTree, withReconnect, setCwd, importSshConfig, type Profile } from "./lib/sftp";
+import { getSftp, subscribeSftp, loadProfiles, saveProfile, deleteProfile, connect, disconnect, cancelTrust, dismissSftpError, forgetHost, setSel, closeAsk, refreshTree, withReconnect, setCwd, importSshConfig, type Profile } from "./lib/sftp";
 
 interface RE { name: string; path: string; is_dir: boolean; size: number; }
 const sortE = (l: RE[]) => [...l].sort((a, b) => Number(b.is_dir) - Number(a.is_dir) || a.name.localeCompare(b.name, undefined, { numeric: true }));
@@ -28,12 +30,12 @@ function RNode({ e, depth }: { e: RE; depth: number }) {
   const reveal = useSyncExternalStore(subscribeSftp, () => getSftp().reveal);
   useEffect(() => { if (e.is_dir && reveal?.path === e.path) setOpen(true); }, [reveal]);
   const parent = e.path.replace(/\/[^/]*$/, "") || "/";
-  const click = () => { setCwd(e.is_dir ? e.path : parent); if (e.is_dir) setOpen(!open); else void openRemote(e.path); };
+  const click = () => { setCwd(e.is_dir ? e.path : parent); setSel(e); if (e.is_dir) setOpen(!open); else void openRemote(e.path); };
   const menu = (ev: React.MouseEvent) => {
-    ev.preventDefault(); setCwd(e.is_dir ? e.path : parent);
+    ev.preventDefault(); setCwd(e.is_dir ? e.path : parent); setSel(e);
     openMenu(ev.clientX, ev.clientY, [
-      ...(e.is_dir ? [{ label: "Nouveau fichier ici", run: () => newFile(e.path) }, { label: "Nouveau dossier ici", run: () => newFolder(e.path) }, { sep: true }] : [{ label: "Ouvrir", run: () => void openRemote(e.path) }]),
-      { label: "Renommer", run: () => renameEntry(e) }, { label: "Supprimer", danger: true, run: () => deleteEntry(e) }, { sep: true },
+      ...(e.is_dir ? [{ label: "Nouveau fichier ici", run: () => newFile(e.path) }, { label: "Nouveau dossier ici", run: () => newFolder(e.path) }, { label: "Envoyer des fichiers ici…", run: () => void uploadFiles(e.path) }, { label: "Envoyer un dossier ici…", run: () => void uploadFolder(e.path) }, { sep: true }] : [{ label: "Ouvrir", run: () => void openRemote(e.path) }]),
+      { label: "Télécharger…", run: () => void download(e) }, { label: "Renommer", run: () => renameEntry(e) }, { label: "Supprimer", danger: true, run: () => deleteEntry(e) }, { sep: true },
       { label: "Copier le chemin", run: () => void navigator.clipboard.writeText(e.path) }]);
   };
   return (<>
@@ -59,6 +61,7 @@ export function Sftp() {
   const [asking, setAsking] = useState<string | null>(null);
   const [secret, setSecret] = useState("");
   useEffect(() => { loadProfiles(); }, []);
+  const prof = s.profiles.find((p) => p.id === s.connected?.id); const here = s.cwd ?? s.connected?.home ?? "/";
   if (!inTauri) return <p className="empty">Le SFTP n’est disponible que dans l’application installée.</p>;
   const go = (id: string) => { const sec = secret; setSecret(""); setAsking(null); connect(id, sec); };
   const submit = async () => {
@@ -75,8 +78,11 @@ export function Sftp() {
       <span>Vérifiez-la auprès de l’administrateur avant d’accepter.</span>
       <button className="btn" onClick={() => connect(s.trust!.id, s.trust!.secret, s.trust!.fp)}>Faire confiance et se connecter</button><button onClick={cancelTrust}>Annuler</button></div>}
     {s.connected ? (<>
-      <div className="rootname"><span title={s.connected.home}>{s.connected.name}</span><button onClick={disconnect}>Déconnecter</button></div>
-      <div className="row2 tools"><button onClick={() => newFileHere()} title="Nouveau fichier à la racine"><Icon n="plus" size={14} /></button><button onClick={() => newFolderHere()} title="Nouveau dossier à la racine"><Icon n="folderplus" size={14} /></button><button onClick={refreshTree} title="Actualiser"><Icon n="refresh" size={14} /></button></div>
+      <div className="rootname"><span title={prof ? `${prof.user}@${prof.host}:${prof.port}` : ""}>{s.connected.name}</span><button onClick={disconnect}>Déconnecter</button></div>
+      <div className="pathbar" title={here}>{here}</div>
+      <div className="row2 tools"><button onClick={() => newFileHere()} title="Nouveau fichier"><Icon n="plus" size={14} /></button><button onClick={() => newFolderHere()} title="Nouveau dossier"><Icon n="folderplus" size={14} /></button>
+        <button className="btn" onClick={(ev) => { const r = ev.currentTarget.getBoundingClientRect(); openMenu(r.left, r.bottom + 2, [{ label: "Envoyer des fichiers ici…", run: () => void uploadFiles(here) }, { label: "Envoyer un dossier ici…", run: () => void uploadFolder(here) }, { sep: true }, { label: "Télécharger la sélection…", disabled: !s.sel, run: () => s.sel && void download(s.sel) }, { sep: true }, { label: "Afficher les transferts et le journal", run: () => showPanel("transfers") }]); }}><Icon n="transfer" size={14} /> Transférer</button>
+        <button onClick={refreshTree} title="Actualiser"><Icon n="refresh" size={14} /></button></div>
       <div role="tree" key={s.connected.id}><RChildren path={s.connected.home} depth={0} /></div>
     </>) : form ? (
       <div className="sform">

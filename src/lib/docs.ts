@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { inTauri, getSettings, update } from "./settings";
 import { withReconnect } from "./sftp";
 import { _ } from "./translate";
+import { log } from "./log";
 
 export interface Tab { path: string; name: string; dirty: boolean; }
 export interface DocsState { tabs: Tab[]; active: string | null; root: string | null; error: string | null; treeVersion: number; cwd: string | null; reveal: { path: string; n: number } | null; }
@@ -45,7 +46,7 @@ async function persist(path: string, force = false): Promise<void> {
   try {
     if (d.remote) {
       const r = await withReconnect(() => invoke<{ mtime: number | null }>("sftp_write", { path: d.remote!.path, content: d.model.getValue(), expectedMtime: d.remote!.mtime, force }));
-      d.remote.mtime = r.mtime;
+      d.remote.mtime = r.mtime; log("info", _("Enregistré sur le serveur : {name}", { name: d.remote.path }));
     } else await invoke("write_file", { path, content: d.model.getValue() });
     d.saved = d.model.getAlternativeVersionId(); setDirty(path, false);
   } catch (e) {

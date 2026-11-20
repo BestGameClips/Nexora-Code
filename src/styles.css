@@ -107,3 +107,8 @@ kbd{background:var(--bg3);border:1px solid var(--bd);border-radius:calc(var(--r)
 .ctxmenu .danger{color:#e5534b}.ctxmenu hr{border:0;border-top:1px solid var(--bd);margin:4px 0;width:100%}
 .tab[draggable=true]{cursor:grab}.tnode.sel{background:var(--sel)}
 .sbtn{background:none;border:0;color:inherit;padding:0 6px;border-radius:var(--r);font:inherit}.sbtn:hover{background:#0003}
+.phead{margin-bottom:8px}.pathbar{font:.85em ui-monospace,Consolas,monospace;color:var(--fg2);padding:2px 4px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+.job{display:flex;align-items:center;gap:10px;padding:5px 2px;border-bottom:1px solid var(--bd)}.jmain{flex:1;min-width:0}.jname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jbar{height:5px;border-radius:var(--rp);background:var(--bg3);overflow:hidden;margin-top:3px}.jbar i{display:block;height:100%;background:var(--ac)}.jbar i.error{background:#e5534b}.jbar i.cancelled,.jbar i.skipped{background:var(--fg2)}
+.jst{flex:none;color:var(--fg2);font-size:.85em;min-width:120px;text-align:right}.job button{padding:1px 10px}
+.logrow{display:flex;gap:10px;font:.88em ui-monospace,Consolas,monospace;padding:1px 0}.logrow .lt{color:var(--fg2);flex:none}.logrow.error{color:#e5534b}.logrow.warn{color:#d9a21b}

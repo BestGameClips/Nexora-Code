@@ -9,6 +9,7 @@ const P: Record<string, string> = {
   server: "M4 5h16v6H4zM4 13h16v6H4zM8 8h.01M8 16h.01",
   plus: "M12 5v14M5 12h14", trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13", pen: "M4 20l4-1 11-11-3-3L5 16z", refresh: "M20 11a8 8 0 1 0-2 5.5M20 4v7h-7",
   folderplus: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6",
+  upload: "M12 16V4M7 9l5-5 5 5M5 20h14", download: "M12 4v12M7 11l5 5 5-5M5 20h14", transfer: "M7 7h13M16 3l4 4-4 4M17 17H4M8 13l-4 4 4 4",
   min: "M5 12h14", max: "M6 6h12v12H6z", restore: "M9 9V5h10v10h-4M5 9h10v10H5z", close: "M6 6l12 12M18 6L6 18",
 };
 export type IconName = keyof typeof P;

@@ -137,6 +137,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Root(Mutex::new(None)))
         .manage(discord::DiscordState(Mutex::new(None)))
+        .manage(sftp::TransferState::default())
         .manage(sftp::SftpState(tauri::async_runtime::Mutex::new(None)))
         .setup(|_app| {
             #[cfg(windows)]
@@ -146,7 +147,7 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![load_settings, save_settings, set_root, list_dir, read_file, write_file, create_file, sftp::profiles_list, sftp::profile_save, sftp::profile_delete, sftp::host_forget, sftp::sftp_connect, sftp::sftp_disconnect, sftp::sftp_list, sftp::sftp_read, sftp::sftp_write, fs_mkdir, fs_rename, fs_trash, fs_reveal, sftp::ssh_config_import, sftp::sftp_create_file, sftp::sftp_mkdir, sftp::sftp_rename, sftp::sftp_remove, discord::discord_connect, discord::discord_update, discord::discord_disconnect])
+        .invoke_handler(tauri::generate_handler![load_settings, save_settings, set_root, list_dir, read_file, write_file, create_file, sftp::profiles_list, sftp::profile_save, sftp::profile_delete, sftp::host_forget, sftp::sftp_connect, sftp::sftp_disconnect, sftp::sftp_list, sftp::sftp_read, sftp::sftp_write, sftp::sftp_upload, sftp::sftp_download, sftp::transfer_cancel, sftp::local_walk, sftp::local_mkdir_all, sftp::sftp_mkdir_p, fs_mkdir, fs_rename, fs_trash, fs_reveal, sftp::ssh_config_import, sftp::sftp_create_file, sftp::sftp_mkdir, sftp::sftp_rename, sftp::sftp_remove, discord::discord_connect, discord::discord_update, discord::discord_disconnect])
         .run(tauri::generate_context!())
         .expect("erreur au lancement de l'application");
 }

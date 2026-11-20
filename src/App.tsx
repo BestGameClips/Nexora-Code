@@ -17,6 +17,8 @@ import { buildPresence } from "./lib/presence";
 import { FileIcon } from "./lib/fileicons";
 import { MenuHost } from "./ContextMenu";
 import { AskHost } from "./Ask";
+import { LogPanel } from "./LogPanel";
+import { showPanel } from "./lib/log";
 import { newFileHere } from "./lib/sftpops";
 import { NAME, SHORT } from "./lib/brand";
 import logo from "./assets/logo@2x.png";
@@ -63,6 +65,8 @@ export function App() {
       { id: "ide.markdown.preview", title: "Aperçu Markdown : afficher/masquer", category: "Éditeur", keys: "Ctrl+Shift+V", run: () => { if (extOn("markdown")) update({ mdPreview: !getSettings().mdPreview }); } },
       { id: "ide.discord.toggle", title: "Discord : activer/désactiver la présence", category: "Discord", run: () => update({ discord: { ...getSettings().discord, enabled: !getSettings().discord.enabled } }) },
       { id: "ide.sftp.focus", title: "Afficher SFTP", category: "SFTP", keys: "Ctrl+Shift+Y", run: () => { setView("sftp"); update({ sidebarVisible: true }); } },
+      { id: "ide.transfers.show", title: "Afficher les transferts SFTP", category: "SFTP", run: () => showPanel("transfers") },
+      { id: "ide.log.show", title: "Afficher le journal", category: "SFTP", run: () => showPanel("log") },
       { id: "ide.sftp.disconnect", title: "Se déconnecter du serveur SFTP", category: "SFTP", run: () => { disconnect(); } },
       { id: "ide.file.new", title: "Nouveau fichier…", category: "Fichier", keys: "Ctrl+N", run: () => { if (viewRef.current === "sftp" && getSftp().connected) newFileHere(); else setNewFile(true); } },
       { id: "ide.tab.moveLeft", title: "Déplacer l’onglet à gauche", category: "Fichier", keys: "Ctrl+Shift+PageUp", run: () => shiftTab(-1) },
@@ -138,7 +142,7 @@ export function App() {
             <div className="scroll" style={{ display: view === "welcome" ? "block" : "none" }}><Welcome onOpen={() => { setView("explorer"); update({ sidebarVisible: true }); openFolder(); }} onSftp={() => { setView("sftp"); update({ sidebarVisible: true }); }} /></div>
             <div className="workspace" style={{ display: view === "settings" || view === "welcome" ? "none" : "flex" }}><Workbench welcome={s.showWelcome ? <Welcome onOpen={() => { setView("explorer"); update({ sidebarVisible: true }); openFolder(); }} onSftp={() => { setView("sftp"); update({ sidebarVisible: true }); }} /> : <p className="page empty">Aucun fichier ouvert. Ctrl+O pour ouvrir un dossier.</p>} theme={themeDef} /></div></div>
           {s.panelVisible && <><div className="resizer h" onPointerDown={drag("y")} role="separator" aria-orientation="horizontal" />
-            <section className="panel" style={{ height: s.panelHeight }}><h2>Journal</h2><p className="empty">Aucun transfert pour le moment. Le journal SFTP s’affichera ici.</p></section></>}
+            <section className="panel" style={{ height: s.panelHeight }}><LogPanel /></section></>}
         </main>
       </div>
       <StatusBar themeName={themeDef.name} />

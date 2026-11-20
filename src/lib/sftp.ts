@@ -1,10 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { inTauri } from "./settings";
 import { _ } from "./translate";
+import { log } from "./log";
 
 export interface Profile { id: string; name: string; host: string; port: number; user: string; auth: "password" | "key"; key_path?: string | null; }
-export interface SftpStore { profiles: Profile[]; connected: { id: string; name: string; home: string } | null; busy: boolean; error: string | null; changedFor: string | null; trust: { id: string; secret?: string; fp: string } | null; tick: number; ask: { title: string; initial: string; run: (name: string) => Promise<void> } | null; lastConn: { id: string; secret?: string } | null; cwd: string | null; reveal: { path: string; n: number } | null; notice: string | null; }
-let st: SftpStore = { profiles: [], connected: null, busy: false, error: null, changedFor: null, trust: null, tick: 0, ask: null, lastConn: null, cwd: null, reveal: null, notice: null };
+export interface SftpStore { profiles: Profile[]; connected: { id: string; name: string; home: string } | null; busy: boolean; error: string | null; changedFor: string | null; trust: { id: string; secret?: string; fp: string } | null; tick: number; ask: { title: string; initial: string; run: (name: string) => Promise<void> } | null; lastConn: { id: string; secret?: string } | null; sel: { path: string; name: string; is_dir: boolean } | null; cwd: string | null; reveal: { path: string; n: number } | null; notice: string | null; }
+let st: SftpStore = { profiles: [], connected: null, busy: false, error: null, changedFor: null, trust: null, tick: 0, ask: null, lastConn: null, sel: null, cwd: null, reveal: null, notice: null };
 const subs = new Set<() => void>();
 const set = (p: Partial<SftpStore>) => { st = { ...st, ...p }; subs.forEach((f) => f()); };
 export const getSftp = () => st;
@@ -30,16 +31,16 @@ export async function connect(id: string, secret?: string, trust?: string) {
   set({ busy: true, error: null, changedFor: null, trust: null });
   try {
     const home = await invoke<string>("sftp_connect", { id, secret: secret ?? null, trust: trust ?? null });
-    set({ connected: { id, name: prof.name, home }, busy: false, lastConn: { id, secret } });
+    set({ connected: { id, name: prof.name, home }, busy: false, lastConn: { id, secret } }); log("info", _("Connecté à {name}", { name: prof.name }));
   } catch (e) {
     const m = String(e);
     if (m.startsWith("UNKNOWN_HOST|")) set({ busy: false, trust: { id, secret, fp: m.split("|")[1] } });
     else if (m.startsWith("HOST_KEY_CHANGED|")) { const [, o, n] = m.split("|"); set({ busy: false, changedFor: id, error: `ATTENTION : l’empreinte du serveur a changé (connue : ${o} ; reçue : ${n}). Connexion bloquée : cela peut indiquer une interception. Si le serveur a été réinstallé, vous pouvez oublier l’ancienne empreinte.` }); }
     else if (m === "AUTH_FAILED") set({ busy: false, error: "Authentification refusée (identifiants incorrects)." });
-    else set({ busy: false, error: m });
+    else { set({ busy: false, error: m }); log("error", m); }
   }
 }
-export async function disconnect() { try { await invoke("sftp_disconnect"); } catch { /* déjà fermé */ } set({ connected: null, lastConn: null, cwd: null }); }
+export async function disconnect() { try { await invoke("sftp_disconnect"); } catch { /* déjà fermé */ } set({ connected: null, lastConn: null, cwd: null, sel: null }); log("info", _("Déconnecté")); }
 
 export const refreshTree = () => set({ tick: st.tick + 1 });
 export const askName = (title: string, initial: string, run: (name: string) => Promise<void>) => set({ ask: { title, initial, run } });
@@ -59,7 +60,7 @@ export async function withReconnect<T>(fn: () => Promise<T>): Promise<T> {
 }
 /** Exécute une opération distante en affichant l'erreur dans le panneau SFTP. */
 export async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
-  try { return await withReconnect(fn); } catch (e) { set({ error: String(e) }); return undefined; }
+  try { return await withReconnect(fn); } catch (e) { set({ error: String(e) }); log("error", String(e)); return undefined; }
 }
 
 export const setCwd = (cwd: string) => set({ cwd });
@@ -73,3 +74,4 @@ export async function importSshConfig() {
     set({ error: null, notice: fresh.length ? _("{n} profil(s) importé(s) depuis ~/.ssh/config", { n: fresh.length }) : _("Aucun nouveau profil à importer.") });
   } catch (e) { set({ error: String(e) }); }
 }
+export const setSel = (sel: { path: string; name: string; is_dir: boolean }) => set({ sel });

@@ -4,13 +4,13 @@ use russh::client::{self, AuthResult};
 use russh::keys::{ssh_key::{HashAlg, PublicKey}, PrivateKeyWithHashAlg};
 use russh_sftp::{client::SftpSession, protocol::{FileType, OpenFlags}};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, path::PathBuf, sync::{Arc, Mutex as StdMutex}, time::Duration};
-use tauri::{AppHandle, State};
+use std::{collections::HashMap, fs, path::PathBuf, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex as StdMutex}, time::{Duration, Instant}};
+use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 fn es<E: std::fmt::Display>(e: E) -> String { e.to_string() }
 
-pub struct Conn { _handle: client::Handle<H>, sftp: SftpSession }
+pub struct Conn { _handle: client::Handle<H>, sftp: Arc<SftpSession> }
 pub struct SftpState(pub tauri::async_runtime::Mutex<Option<Conn>>);
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -105,7 +105,7 @@ pub async fn sftp_connect(app: AppHandle, state: State<'_, SftpState>, id: Strin
     ch.request_subsystem(true, "sftp").await.map_err(es)?;
     let sftp = SftpSession::new(ch.into_stream()).await.map_err(es)?;
     let home = sftp.canonicalize(".").await.map_err(es)?;
-    *state.0.lock().await = Some(Conn { _handle: session, sftp });
+    *state.0.lock().await = Some(Conn { _handle: session, sftp: Arc::new(sftp) });
     Ok(home)
 }
 
@@ -232,4 +232,123 @@ pub async fn ssh_config_import() -> Result<Vec<Profile>, String> {
     }
     if let Some(p) = cur { out.push(p); }
     Ok(out.into_iter().filter(|p| !p.user.is_empty() && !p.host.is_empty()).collect())
+}
+
+// ───────────── Transferts (fichiers et dossiers) ─────────────
+#[derive(Default)]
+pub struct TransferState(pub StdMutex<HashMap<String, Arc<AtomicBool>>>);
+
+#[derive(Serialize, Clone)]
+struct Progress { id: String, done: u64, total: u64 }
+
+async fn conn_sftp(state: &State<'_, SftpState>) -> Result<Arc<SftpSession>, String> {
+    Ok(state.0.lock().await.as_ref().ok_or("Non connecté")?.sftp.clone())
+}
+
+/// Envoi vers `<dest>.nexora-part` puis remplacement : un envoi interrompu ne détruit jamais le fichier distant existant.
+#[tauri::command]
+pub async fn sftp_upload(app: AppHandle, state: State<'_, SftpState>, tr: State<'_, TransferState>, id: String, local: String, remote: String, overwrite: bool) -> Result<(), String> {
+    let sftp = conn_sftp(&state).await?;
+    if !overwrite && sftp.try_exists(remote.clone()).await.map_err(es)? { return Err("EXISTS".into()); }
+    let flag = Arc::new(AtomicBool::new(false));
+    tr.0.lock().map_err(es)?.insert(id.clone(), flag.clone());
+    let part = format!("{remote}.nexora-part");
+    let res: Result<(), String> = async {
+        let mut src = tokio::fs::File::open(&local).await.map_err(es)?;
+        let total = src.metadata().await.map_err(es)?.len();
+        let mut dst = sftp.open_with_flags(part.clone(), OpenFlags::CREATE | OpenFlags::WRITE | OpenFlags::TRUNCATE).await.map_err(es)?;
+        let mut buf = vec![0u8; 32 * 1024];
+        let (mut done, mut last) = (0u64, Instant::now());
+        loop {
+            if flag.load(Ordering::Relaxed) { return Err("CANCELLED".to_string()); }
+            let n = src.read(&mut buf).await.map_err(es)?;
+            if n == 0 { break; }
+            dst.write_all(&buf[..n]).await.map_err(es)?;
+            done += n as u64;
+            if last.elapsed() >= Duration::from_millis(150) { let _ = app.emit("transfer-progress", Progress { id: id.clone(), done, total }); last = Instant::now(); }
+        }
+        dst.shutdown().await.map_err(es)?;
+        if sftp.try_exists(remote.clone()).await.map_err(es)? { sftp.remove_file(remote.clone()).await.map_err(es)?; }
+        sftp.rename(part.clone(), remote.clone()).await.map_err(es)?;
+        let _ = app.emit("transfer-progress", Progress { id: id.clone(), done: total, total });
+        Ok(())
+    }.await;
+    if res.is_err() { let _ = sftp.remove_file(part).await; }
+    tr.0.lock().map_err(es)?.remove(&id);
+    res
+}
+
+#[tauri::command]
+pub async fn sftp_download(app: AppHandle, state: State<'_, SftpState>, tr: State<'_, TransferState>, id: String, remote: String, local: String, overwrite: bool) -> Result<(), String> {
+    let sftp = conn_sftp(&state).await?;
+    if !overwrite && PathBuf::from(&local).exists() { return Err("EXISTS".into()); }
+    if let Some(parent) = PathBuf::from(&local).parent() { tokio::fs::create_dir_all(parent).await.map_err(es)?; }
+    let flag = Arc::new(AtomicBool::new(false));
+    tr.0.lock().map_err(es)?.insert(id.clone(), flag.clone());
+    let part = format!("{local}.nexora-part");
+    let res: Result<(), String> = async {
+        let total = sftp.metadata(remote.clone()).await.map_err(es)?.size.unwrap_or(0);
+        let mut src = sftp.open_with_flags(remote.clone(), OpenFlags::READ).await.map_err(es)?;
+        let mut dst = tokio::fs::File::create(&part).await.map_err(es)?;
+        let mut buf = vec![0u8; 32 * 1024];
+        let (mut done, mut last) = (0u64, Instant::now());
+        loop {
+            if flag.load(Ordering::Relaxed) { return Err("CANCELLED".to_string()); }
+            let n = src.read(&mut buf).await.map_err(es)?;
+            if n == 0 { break; }
+            dst.write_all(&buf[..n]).await.map_err(es)?;
+            done += n as u64;
+            if last.elapsed() >= Duration::from_millis(150) { let _ = app.emit("transfer-progress", Progress { id: id.clone(), done, total }); last = Instant::now(); }
+        }
+        dst.flush().await.map_err(es)?;
+        drop(dst);
+        tokio::fs::rename(&part, &local).await.map_err(es)?;
+        let _ = app.emit("transfer-progress", Progress { id: id.clone(), done: total.max(done), total: total.max(done) });
+        Ok(())
+    }.await;
+    if res.is_err() { let _ = tokio::fs::remove_file(&part).await; }
+    tr.0.lock().map_err(es)?.remove(&id);
+    res
+}
+
+#[tauri::command]
+pub async fn transfer_cancel(tr: State<'_, TransferState>, id: String) -> Result<(), String> {
+    if let Some(f) = tr.0.lock().map_err(es)?.get(&id) { f.store(true, Ordering::Relaxed); }
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct LocalFile { rel: String, size: u64 }
+
+/// Liste récursive d'un dossier local choisi par l'utilisateur (liens symboliques ignorés).
+#[tauri::command]
+pub async fn local_walk(dir: String) -> Result<Vec<LocalFile>, String> {
+    let base = PathBuf::from(&dir);
+    let (mut out, mut stack) = (Vec::new(), vec![base.clone()]);
+    while let Some(d) = stack.pop() {
+        for e in fs::read_dir(&d).map_err(es)?.flatten() {
+            let ft = match e.file_type() { Ok(t) => t, Err(_) => continue };
+            if ft.is_symlink() { continue; }
+            let p = e.path();
+            if ft.is_dir() { stack.push(p); continue; }
+            let rel = p.strip_prefix(&base).map_err(es)?.to_string_lossy().replace('\\', "/");
+            out.push(LocalFile { rel, size: e.metadata().map(|m| m.len()).unwrap_or(0) });
+            if out.len() > 50_000 { return Err("Dossier trop volumineux (plus de 50 000 fichiers)".into()); }
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub async fn local_mkdir_all(path: String) -> Result<(), String> { fs::create_dir_all(path).map_err(es) }
+
+#[tauri::command]
+pub async fn sftp_mkdir_p(state: State<'_, SftpState>, path: String) -> Result<(), String> {
+    let s = conn_sftp(&state).await?;
+    let mut cur = String::new();
+    for part in path.split('/').filter(|p| !p.is_empty()) {
+        cur.push('/'); cur.push_str(part);
+        if !s.try_exists(cur.clone()).await.map_err(es)? { s.create_dir(cur.clone()).await.map(|_| ()).map_err(es)?; }
+    }
+    Ok(())
 }
